@@ -120,6 +120,11 @@ function AddressAutocomplete({ value, onChangeText, onAddressSelect, placeholder
         {
           input: text,
           componentRestrictions: { country: 'us' },
+          bounds: new window.google.maps.LatLngBounds(
+            new window.google.maps.LatLng(37.2, -122.8),  // SW corner (south of San Jose)
+            new window.google.maps.LatLng(38.8, -121.5)   // NE corner (north of Vacaville/Santa Rosa)
+          ),
+          strictBounds: true,
           types: ['address'],
           sessionToken: sessionToken.current,
         },
@@ -753,35 +758,70 @@ export default function CreateBooking() {
           {renderSectionHeader('cube', 'Service Details')}
 
           <Text style={s.label}>
-            Dumpster Size <Text style={s.required}>*</Text>
-          </Text>
-          <View style={s.pillRow}>
-            {DUMPSTER_SIZES.map((sz) => {
-              const count = (state.dumpsters || []).filter(d => d.size === sz.id).length;
-              const availCount = (state.dumpsters || []).filter(d => d.size === sz.id && d.status === 'available').length;
-              if (count === 0) return null;
-              return renderPill(
-                `${sz.label} \u2014 $${sz.basePrice} (${availCount} avail)`,
-                dumpsterSize === sz.id,
-                () => {
-                  setDumpsterSize(sz.id);
-                  setDumpsterId('');
-                  setBasePrice(String(sz.basePrice));
-                }
-              );
-            })}
-          </View>
-
-          <Text style={s.label}>
             Service Type <Text style={s.required}>*</Text>
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
             <View style={s.pillRow}>
               {SERVICE_TYPES.map((t) =>
-                renderPill(t, serviceType === t, () => setServiceType(t))
+                renderPill(
+                  `${t.icon} ${t.label}`,
+                  serviceType === t.id,
+                  () => {
+                    setServiceType(t.id);
+                    // Reset size if not available in new service
+                    if (dumpsterSize && !t.sizes.includes(dumpsterSize)) {
+                      setDumpsterSize('');
+                      setDumpsterId('');
+                      setBasePrice('');
+                    }
+                  }
+                )
               )}
             </View>
           </ScrollView>
+          {(() => {
+            const selected = SERVICE_TYPES.find((t) => t.id === serviceType);
+            if (!selected) return null;
+            return (
+              <View style={{ marginBottom: 8, paddingHorizontal: 2 }}>
+                <Text style={{ color: textSecondary, fontSize: 13, marginBottom: 2 }}>{selected.description}</Text>
+                {selected.note ? (
+                  <Text style={{ color: info, fontSize: 12, fontStyle: 'italic' }}>{selected.note}</Text>
+                ) : null}
+              </View>
+            );
+          })()}
+
+          <Text style={s.label}>
+            Dumpster Size <Text style={s.required}>*</Text>
+          </Text>
+          {serviceType ? (
+            <View style={s.pillRow}>
+              {DUMPSTER_SIZES.filter((sz) => {
+                const selectedSvc = SERVICE_TYPES.find((t) => t.id === serviceType);
+                return selectedSvc && selectedSvc.sizes.includes(sz.id);
+              }).map((sz) => {
+                const count = (state.dumpsters || []).filter(d => d.size === sz.id).length;
+                const availCount = (state.dumpsters || []).filter(d => d.size === sz.id && d.status === 'available').length;
+                if (count === 0) return null;
+                const selectedSvc = SERVICE_TYPES.find((t) => t.id === serviceType);
+                const price = (selectedSvc && selectedSvc.priceOverride && selectedSvc.priceOverride[sz.id]) || sz.basePrice;
+                return renderPill(
+                  `${sz.label} \u2014 $${price} (${availCount} avail)`,
+                  dumpsterSize === sz.id,
+                  () => {
+                    setDumpsterSize(sz.id);
+                    setDumpsterId('');
+                    setBasePrice(String(price));
+                  }
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={{ color: textMuted, fontSize: 13, marginBottom: 8, fontStyle: 'italic' }}>
+              Select a service type first
+            </Text>
+          )}
 
           <Text style={s.label}>Type of Material</Text>
           <TextInput
