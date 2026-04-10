@@ -93,14 +93,31 @@ export default function EditBooking() {
     }
   }, [booking]);
 
-  const availableDumpsters = useMemo(() => {
-    if (!dumpsterSize) return [];
-    return (state.dumpsters || []).filter(
-      (d) =>
-        d.size === dumpsterSize &&
-        (d.status === 'available' || d.id === booking?.dumpsterId)
-    );
-  }, [dumpsterSize, state.dumpsters, booking]);
+  // Smart inventory: include dumpsters freed before delivery date
+  const { availableNow, availableSoon } = useMemo(() => {
+    if (!dumpsterSize) return { availableNow: [], availableSoon: [] };
+    const sizeMatch = (state.dumpsters || []).filter((d) => d.size === dumpsterSize);
+    const now = [];
+    const soon = [];
+    const rentalDays = dumpsterSize === '10yd' ? 3 : 7;
+
+    sizeMatch.forEach((d) => {
+      if (d.status === 'available' || d.id === booking?.dumpsterId) {
+        now.push(d);
+      } else if (d.status === 'deployed' && d.assignedBooking && deliveryDate) {
+        const assignedBooking = (state.bookings || []).find((b) => b.id === d.assignedBooking);
+        if (assignedBooking && assignedBooking.deliveryDate) {
+          const releaseDate = new Date(assignedBooking.deliveryDate + 'T00:00:00');
+          releaseDate.setDate(releaseDate.getDate() + rentalDays);
+          const targetDate = new Date(deliveryDate + 'T00:00:00');
+          if (releaseDate <= targetDate) {
+            soon.push({ ...d, _releasesBy: releaseDate.toISOString().slice(0, 10), _fromBooking: assignedBooking.id });
+          }
+        }
+      }
+    });
+    return { availableNow: now, availableSoon: soon };
+  }, [dumpsterSize, deliveryDate, state.dumpsters, state.bookings, booking]);
 
   const toggleSpecialItem = (item) => {
     setSelectedSpecialItems((prev) => {
@@ -407,21 +424,51 @@ export default function EditBooking() {
           })}
         </View>
 
-        {/* Assign Dumpster */}
+        {/* Assign Dumpster — Smart Inventory */}
         {dumpsterSize ? (
           <>
             <Text style={styles.label}>Assign Dumpster</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
               <View style={styles.pillRow}>
                 {renderPill('Auto (none)', !dumpsterId, () => setDumpsterId(''))}
-                {availableDumpsters.map((d) =>
+                {availableNow.map((d) =>
                   renderPill(d.id, dumpsterId === d.id, () => setDumpsterId(d.id), success)
-                )}
-                {availableDumpsters.length === 0 && (
-                  <Text style={styles.noneText}>No available dumpsters for this size</Text>
                 )}
               </View>
             </ScrollView>
+            {availableSoon.length > 0 && (
+              <View style={styles.smartInventory}>
+                <View style={styles.smartHeader}>
+                  <Ionicons name="bulb-outline" size={16} color={primaryLight} />
+                  <Text style={styles.smartTitle}>Available by delivery date</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.pillRow}>
+                    {availableSoon.map((d) => (
+                      <TouchableOpacity
+                        key={d.id}
+                        style={[
+                          styles.pill,
+                          styles.smartPill,
+                          dumpsterId === d.id && { backgroundColor: primaryLight + '22', borderColor: primaryLight },
+                        ]}
+                        onPress={() => setDumpsterId(d.id)}
+                      >
+                        <Text style={[styles.pillText, dumpsterId === d.id && { color: primaryLight, fontWeight: '600' }]}>
+                          {d.id}
+                        </Text>
+                        <Text style={styles.smartSubtext}>
+                          Free by {d._releasesBy}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
+            {availableNow.length === 0 && availableSoon.length === 0 && (
+              <Text style={styles.noneText}>No dumpsters available for this size and date</Text>
+            )}
           </>
         ) : null}
 
@@ -642,6 +689,34 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     alignSelf: 'center',
     marginLeft: 8,
+    marginTop: 8,
+  },
+  smartInventory: {
+    marginTop: 10,
+    backgroundColor: primaryLight + '0D',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: primaryLight + '30',
+  },
+  smartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  smartTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: primaryLight,
+  },
+  smartPill: {
+    borderStyle: 'dashed',
+  },
+  smartSubtext: {
+    fontSize: 10,
+    color: textMuted,
+    marginTop: 2,
   },
   totalCard: {
     backgroundColor: bgCard,
