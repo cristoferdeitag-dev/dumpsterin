@@ -39,12 +39,6 @@ export default function BookingsScreen() {
   const filteredBookings = useMemo(() => {
     let filtered = [...bookings];
 
-    if (topFilter === 'scheduled') {
-      filtered = filtered.filter(b => b.status === 'scheduled');
-    } else if (topFilter === 'active') {
-      filtered = filtered.filter(b => ['in_transit', 'delivered', 'pickup_ready'].includes(b.status));
-    }
-
     if (detailFilter !== 'all') {
       filtered = filtered.filter(b => b.status === detailFilter);
     }
@@ -52,7 +46,7 @@ export default function BookingsScreen() {
     filtered.sort((a, b) => (b.deliveryDate || b.createdAt || '').localeCompare(a.deliveryDate || a.createdAt || ''));
 
     return filtered;
-  }, [bookings, topFilter, detailFilter]);
+  }, [bookings, detailFilter]);
 
   const renderBookingCard = useCallback(({ item: booking }) => {
     const statusColor = STATUS_COLORS[booking.status] || '#737373';
@@ -204,60 +198,26 @@ export default function BookingsScreen() {
         </Text>
       </View>
 
-      {/* Top Filter Pills */}
-      <View style={{
-        flexDirection: 'row',
-        marginTop: 12,
-        marginBottom: 8,
-        backgroundColor: '#1c1b1b',
-        marginHorizontal: 16,
-        borderRadius: 9999,
-        padding: 4,
-      }}>
-        {TOP_FILTERS.map((filter) => (
-          <TouchableOpacity
-            key={filter.id}
-            onPress={() => {
-              setTopFilter(filter.id);
-              if (filter.id !== 'all') setDetailFilter('all');
-            }}
-            style={{
-              flex: 1,
-              backgroundColor: topFilter === filter.id ? '#ff8c00' : 'transparent',
-              paddingVertical: 10,
-              borderRadius: 9999,
-              alignItems: 'center',
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={{
-              color: topFilter === filter.id ? '#4d2600' : '#ddc1ae',
-              fontSize: 13,
-              fontWeight: '600',
-            }}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Detail Filter Scrollable */}
+      {/* Status Filters */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 8 }}
       >
         {DETAIL_FILTERS.map((filter) => (
           <TouchableOpacity
             key={filter.id}
-            onPress={() => setDetailFilter(filter.id)}
+            onPress={() => {
+              setDetailFilter(filter.id);
+              setTopFilter('all');
+            }}
             style={{
               backgroundColor: detailFilter === filter.id ? '#353535' : '#1c1b1b',
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              borderRadius: 12,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 9999,
               borderWidth: detailFilter === filter.id ? 1 : 0,
-              borderColor: 'rgba(255, 183, 125, 0.2)',
+              borderColor: detailFilter === filter.id ? 'rgba(255, 183, 125, 0.3)' : 'transparent',
             }}
             activeOpacity={0.7}
           >
