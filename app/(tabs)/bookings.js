@@ -1,436 +1,317 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  FlatList,
-  TouchableOpacity,
-  SafeAreaView,
-  StyleSheet,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, FlatList, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
-import colors from '../../src/theme/colors';
 
 const STATUS_COLORS = {
-  scheduled: colors.status.scheduled,
-  in_transit: colors.status.in_transit,
-  delivered: colors.status.delivered,
-  pickup_ready: colors.status.pickup_ready,
-  picked_up: colors.status.picked_up,
-  completed: colors.status.completed,
-  cancelled: colors.status.cancelled,
+  scheduled: '#60a5fa',
+  in_transit: '#ffb77d',
+  delivered: '#737373',
+  pickup_ready: '#00b5fc',
+  picked_up: '#85cfff',
+  completed: '#737373',
+  cancelled: '#ffb4ab',
 };
 
-const STATUS_LABELS = {
-  all: 'All',
-  scheduled: 'Scheduled',
-  in_transit: 'In Transit',
-  delivered: 'Delivered',
-  pickup_ready: 'Pickup Ready',
-  picked_up: 'Picked Up',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-};
-
-const FILTER_KEYS = [
-  'all',
-  'scheduled',
-  'in_transit',
-  'delivered',
-  'pickup_ready',
-  'picked_up',
-  'completed',
-  'cancelled',
+const TOP_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'scheduled', label: 'Scheduled' },
+  { id: 'active', label: 'Active' },
 ];
 
-function formatCurrency(amount) {
-  if (!amount && amount !== 0) return '$0';
-  return '$' + Number(amount).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+const DETAIL_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'scheduled', label: 'Scheduled' },
+  { id: 'in_transit', label: 'In Transit' },
+  { id: 'delivered', label: 'Delivered' },
+  { id: 'pickup_ready', label: 'Pickup' },
+];
 
 export default function BookingsScreen() {
   const router = useRouter();
   const { state } = useApp();
-  const bookings = state.bookings || [];
+  const { bookings } = state;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [topFilter, setTopFilter] = useState('all');
+  const [detailFilter, setDetailFilter] = useState('all');
 
   const filteredBookings = useMemo(() => {
-    let result = bookings;
+    let filtered = [...bookings];
 
-    // Apply status filter
-    if (activeFilter !== 'all') {
-      result = result.filter((b) => b.status === activeFilter);
+    if (topFilter === 'scheduled') {
+      filtered = filtered.filter(b => b.status === 'scheduled');
+    } else if (topFilter === 'active') {
+      filtered = filtered.filter(b => ['in_transit', 'delivered', 'pickup_ready'].includes(b.status));
     }
 
-    // Apply search
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        (b) =>
-          (b.customerName && b.customerName.toLowerCase().includes(q)) ||
-          (b.id && String(b.id).toLowerCase().includes(q)) ||
-          (b.deliveryAddress && b.deliveryAddress.toLowerCase().includes(q))
-      );
+    if (detailFilter !== 'all') {
+      filtered = filtered.filter(b => b.status === detailFilter);
     }
 
-    // Sort by most recent first
-    return [...result].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }, [bookings, activeFilter, searchQuery]);
+    filtered.sort((a, b) => (b.deliveryDate || b.createdAt || '').localeCompare(a.deliveryDate || a.createdAt || ''));
 
-  const renderFilterTab = useCallback(
-    ({ item }) => {
-      const isActive = activeFilter === item;
-      return (
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            isActive ? styles.filterTabActive : styles.filterTabInactive,
-          ]}
-          activeOpacity={0.7}
-          onPress={() => setActiveFilter(item)}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              isActive ? styles.filterTabTextActive : styles.filterTabTextInactive,
-            ]}
-          >
-            {STATUS_LABELS[item]}
-          </Text>
-        </TouchableOpacity>
-      );
-    },
-    [activeFilter]
-  );
+    return filtered;
+  }, [bookings, topFilter, detailFilter]);
 
-  const renderBookingCard = useCallback(
-    ({ item: booking }) => (
+  const renderBookingCard = useCallback(({ item: booking }) => {
+    const statusColor = STATUS_COLORS[booking.status] || '#737373';
+    const sizeNum = booking.dumpsterSize ? booking.dumpsterSize.replace('yd', '') : '--';
+
+    return (
       <TouchableOpacity
-        style={styles.bookingCard}
-        activeOpacity={0.7}
         onPress={() => router.push(`/booking/${booking.id}`)}
+        activeOpacity={0.7}
+        style={{
+          backgroundColor: '#1c1b1b',
+          borderRadius: 12,
+          overflow: 'hidden',
+          marginBottom: 14,
+        }}
       >
-        {/* Top Row: ID + Status */}
-        <View style={styles.cardTopRow}>
-          <Text style={styles.bookingId}>#{booking.id}</Text>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: (STATUS_COLORS[booking.status] || colors.textMuted) + '20' },
-            ]}
-          >
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: STATUS_COLORS[booking.status] || colors.textMuted },
-              ]}
-            />
-            <Text
-              style={[
-                styles.statusText,
-                { color: STATUS_COLORS[booking.status] || colors.textMuted },
-              ]}
-            >
-              {STATUS_LABELS[booking.status] || booking.status}
+        {/* Card body */}
+        <View style={{ padding: 20 }}>
+          {/* Top row: chip + ID */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <View style={{
+              backgroundColor: `${statusColor}18`,
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              borderRadius: 9999,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 5,
+            }}>
+              <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: statusColor }} />
+              <Text style={{
+                color: statusColor,
+                fontSize: 9,
+                fontWeight: '800',
+                letterSpacing: 1.5,
+                textTransform: 'uppercase',
+              }}>
+                {(booking.status || '').replace('_', ' ')}
+              </Text>
+            </View>
+            <Text style={{
+              color: '#ddc1ae',
+              fontSize: 11,
+              fontWeight: '500',
+              fontVariant: ['tabular-nums'],
+              letterSpacing: -0.3,
+            }}>
+              #{booking.id}
             </Text>
           </View>
+
+          {/* Customer name */}
+          <Text style={{
+            color: '#e5e2e1',
+            fontSize: 18,
+            fontWeight: '800',
+            letterSpacing: -0.3,
+            marginBottom: 4,
+          }}>
+            {booking.customerName}
+          </Text>
+
+          {/* Address */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 18 }}>
+            <Ionicons name="location-outline" size={13} color="#ddc1ae" />
+            <Text style={{ color: '#ddc1ae', fontSize: 13, fontWeight: '400' }} numberOfLines={1}>
+              {booking.deliveryAddress}
+            </Text>
+          </View>
+
+          {/* Bottom row: Size + Price */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View>
+              <Text style={{
+                color: '#ddc1ae',
+                fontSize: 10,
+                fontWeight: '600',
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                marginBottom: 2,
+              }}>
+                Container Size
+              </Text>
+              <Text style={{ color: '#e5e2e1', fontSize: 24, fontWeight: '800', fontStyle: 'italic' }}>
+                {sizeNum}
+                <Text style={{ fontSize: 12, fontWeight: '700', fontStyle: 'normal' }}> yd</Text>
+              </Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{
+                color: '#ddc1ae',
+                fontSize: 10,
+                fontWeight: '600',
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                marginBottom: 2,
+              }}>
+                Base Rate
+              </Text>
+              <Text style={{ color: '#ffb77d', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>
+                ${booking.basePrice?.toFixed(2) || '0.00'}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        {/* Customer Name */}
-        <Text style={styles.customerName} numberOfLines={1}>
-          {booking.customerName}
-        </Text>
-
-        {/* Address */}
-        <Text style={styles.address} numberOfLines={1}>
-          <Ionicons name="location-outline" size={12} color={colors.textSecondary} />{' '}
-          {booking.deliveryAddress}
-        </Text>
-
-        {/* Bottom Row: Size, Date, Price */}
-        <View style={styles.cardBottomRow}>
-          <View style={styles.cardDetail}>
-            <Ionicons name="cube-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.cardDetailText}>{booking.dumpsterSize}</Text>
+        {/* Footer bar */}
+        <View style={{
+          backgroundColor: '#353535',
+          paddingHorizontal: 20,
+          paddingVertical: 14,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="calendar-outline" size={16} color={statusColor} />
+            <Text style={{ color: '#e5e2e1', fontSize: 13, fontWeight: '600' }}>
+              {booking.deliveryDate || booking.createdAt}
+            </Text>
           </View>
-          <View style={styles.cardDetail}>
-            <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.cardDetailText}>{formatDate(booking.deliveryDate)}</Text>
-          </View>
-          <Text style={styles.cardPrice}>{formatCurrency(booking.total)}</Text>
+          <Ionicons name="chevron-forward" size={16} color="#ddc1ae" />
         </View>
       </TouchableOpacity>
-    ),
-    [router]
-  );
-
-  const keyExtractor = useCallback((item) => String(item.id), []);
-
-  const ListEmptyComponent = useMemo(
-    () => (
-      <View style={styles.emptyState}>
-        <Ionicons name="search-outline" size={48} color={colors.textMuted} />
-        <Text style={styles.emptyTitle}>No bookings found</Text>
-        <Text style={styles.emptySubtitle}>
-          {searchQuery ? 'Try adjusting your search or filters' : 'No bookings match this filter'}
-        </Text>
-      </View>
-    ),
-    [searchQuery]
-  );
+    );
+  }, [router]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#131313' }}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Bookings</Text>
-        <Text style={styles.countLabel}>{filteredBookings.length} total</Text>
+      <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
+        <Text style={{
+          color: '#ddc1ae',
+          fontSize: 10,
+          fontWeight: '600',
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+          marginBottom: 4,
+        }}>
+          Management Console
+        </Text>
+        <Text style={{
+          color: '#e5e2e1',
+          fontSize: 32,
+          fontWeight: '800',
+          letterSpacing: -0.5,
+        }}>
+          Bookings
+        </Text>
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={18} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by name, ID, or address..."
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
-            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+      {/* Top Filter Pills */}
+      <View style={{
+        flexDirection: 'row',
+        marginTop: 12,
+        marginBottom: 8,
+        backgroundColor: '#1c1b1b',
+        marginHorizontal: 16,
+        borderRadius: 9999,
+        padding: 4,
+      }}>
+        {TOP_FILTERS.map((filter) => (
+          <TouchableOpacity
+            key={filter.id}
+            onPress={() => {
+              setTopFilter(filter.id);
+              if (filter.id !== 'all') setDetailFilter('all');
+            }}
+            style={{
+              flex: 1,
+              backgroundColor: topFilter === filter.id ? '#ff8c00' : 'transparent',
+              paddingVertical: 10,
+              borderRadius: 9999,
+              alignItems: 'center',
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={{
+              color: topFilter === filter.id ? '#4d2600' : '#ddc1ae',
+              fontSize: 13,
+              fontWeight: '600',
+            }}>
+              {filter.label}
+            </Text>
           </TouchableOpacity>
-        )}
+        ))}
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filtersContainer}>
-        <FlatList
-          data={FILTER_KEYS}
-          renderItem={renderFilterTab}
-          keyExtractor={(item) => item}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersList}
-        />
-      </View>
+      {/* Detail Filter Scrollable */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}
+      >
+        {DETAIL_FILTERS.map((filter) => (
+          <TouchableOpacity
+            key={filter.id}
+            onPress={() => setDetailFilter(filter.id)}
+            style={{
+              backgroundColor: detailFilter === filter.id ? '#353535' : '#1c1b1b',
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 12,
+              borderWidth: detailFilter === filter.id ? 1 : 0,
+              borderColor: 'rgba(255, 183, 125, 0.2)',
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={{
+              color: detailFilter === filter.id ? '#ffb77d' : '#ddc1ae',
+              fontSize: 13,
+              fontWeight: detailFilter === filter.id ? '700' : '500',
+            }}>
+              {filter.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-      {/* Bookings List */}
+      {/* Booking List */}
       <FlatList
         data={filteredBookings}
         renderItem={renderBookingCard}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={styles.listContent}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={ListEmptyComponent}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', paddingTop: 60 }}>
+            <Ionicons name="document-text-outline" size={48} color="#474747" />
+            <Text style={{ color: '#ddc1ae', fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+              No bookings found
+            </Text>
+          </View>
+        }
       />
 
       {/* FAB */}
       <TouchableOpacity
-        style={styles.fab}
-        activeOpacity={0.8}
         onPress={() => router.push('/booking/create')}
+        activeOpacity={0.8}
+        style={{
+          position: 'absolute',
+          right: 20,
+          bottom: 24,
+          width: 56,
+          height: 56,
+          borderRadius: 16,
+          backgroundColor: '#ff8c00',
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#ff8c00',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.4,
+          shadowRadius: 12,
+          elevation: 8,
+        }}
       >
-        <Ionicons name="add" size={28} color={colors.text} />
+        <Ionicons name="add" size={28} color="#4d2600" />
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  countLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgCard,
-    marginHorizontal: 16,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 44,
-    fontSize: 15,
-    color: colors.text,
-  },
-  clearBtn: {
-    padding: 4,
-  },
-  filtersContainer: {
-    marginBottom: 8,
-  },
-  filtersList: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  filterTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginRight: 0,
-  },
-  filterTabActive: {
-    backgroundColor: colors.primary,
-  },
-  filterTabInactive: {
-    backgroundColor: colors.bgElevated,
-  },
-  filterTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  filterTabTextActive: {
-    color: colors.text,
-  },
-  filterTabTextInactive: {
-    color: colors.textSecondary,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  bookingCard: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cardTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  bookingId: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    gap: 5,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  customerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  address: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 12,
-  },
-  cardBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 10,
-    gap: 16,
-  },
-  cardDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardDetailText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontWeight: '500',
-  },
-  cardPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.success,
-    marginLeft: 'auto',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: colors.textMuted,
-    marginTop: 6,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-  },
-});

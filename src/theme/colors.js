@@ -1,36 +1,36 @@
 // Backgrounds
-export const bg = '#0D0D0D';
-export const bgCard = '#1A1A1A';
-export const bgElevated = '#242424';
-export const bgInput = '#2A2A2A';
-export const border = '#333333';
+export const bg = '#131313';
+export const bgCard = '#1c1b1b';
+export const bgElevated = '#2a2a2a';
+export const bgInput = '#353535';
+export const border = '#564334';
 
-// Primary (Orange)
-export const primary = '#FF6B00';
-export const primaryLight = '#FF8C3A';
-export const primaryDark = '#CC5500';
+// Primary (Warm Amber)
+export const primary = '#ffb77d';
+export const primaryLight = '#ffdcc3';
+export const primaryDark = '#ff8c00';
 
 // Status
-export const success = '#00C853';
-export const warning = '#FFB300';
-export const danger = '#FF3D00';
-export const info = '#2196F3';
-export const infoDark = '#1976D2';
+export const success = '#85cfff';
+export const warning = '#ffb77d';
+export const danger = '#ffb4ab';
+export const info = '#85cfff';
+export const infoDark = '#00b5fc';
 
 // Text
-export const text = '#FFFFFF';
-export const textSecondary = '#A0A0A0';
-export const textMuted = '#666666';
+export const text = '#e5e2e1';
+export const textSecondary = '#ddc1ae';
+export const textMuted = '#737373';
 
 // Booking statuses
 export const status = {
-  scheduled: '#2196F3',
-  in_transit: '#FFB300',
-  delivered: '#00C853',
-  pickup_ready: '#FF8C3A',
-  picked_up: '#1976D2',
-  completed: '#00C853',
-  cancelled: '#FF3D00',
+  scheduled: '#60a5fa',
+  in_transit: '#ffb77d',
+  delivered: '#737373',
+  pickup_ready: '#00b5fc',
+  picked_up: '#85cfff',
+  completed: '#737373',
+  cancelled: '#ffb4ab',
 };
 
 export const colors = {

@@ -1,411 +1,285 @@
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, FlatList, TouchableOpacity, TextInput, Image } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
-import {
-  bg,
-  bgCard,
-  bgElevated,
-  bgInput,
-  border,
-  primary,
-  primaryLight,
-  success,
-  warning,
-  danger,
-  text,
-  textSecondary,
-  textMuted,
-} from '../../src/theme/colors';
 
-const FILTERS = ['All', 'Available', 'Deployed', 'Maintenance'];
-
-const STATUS_CONFIG = {
-  available: { color: success, label: 'Available' },
-  deployed: { color: primary, label: 'Deployed' },
-  maintenance: { color: danger, label: 'Maintenance' },
+const COLORS = {
+  surface: '#131313',
+  surface_container_low: '#1c1b1b',
+  surface_container: '#20201f',
+  surface_container_high: '#2a2a2a',
+  surface_container_highest: '#353535',
+  surface_container_lowest: '#0e0e0e',
+  surface_bright: '#393939',
+  primary: '#ffb77d',
+  primary_container: '#ff8c00',
+  on_primary: '#4d2600',
+  on_surface: '#e5e2e1',
+  on_surface_variant: '#ddc1ae',
+  tertiary: '#85cfff',
+  on_tertiary: '#00344c',
+  error: '#ffb4ab',
+  outline_variant: '#564334',
+  secondary_container: '#474747',
 };
+
+const DUMPSTER_IMAGES = {
+  '10yd': 'https://tpdumpsters.com/images/dumpsters/10-yard-dumpster.png',
+  '20yd': 'https://tpdumpsters.com/images/dumpsters/20-yard-dumpster.png',
+  '30yd': 'https://tpdumpsters.com/images/dumpsters/30-yard-dumpster.png',
+};
+
+function getCategoryLabel(size) {
+  if (size === '10yd') return 'HEAVY DUTY';
+  if (size === '20yd') return 'STANDARD ROLL-OFF';
+  if (size === '30yd') return 'MAX CAPACITY';
+  return 'STANDARD';
+}
+
+function getStatusColor(status) {
+  if (status === 'deployed') return COLORS.tertiary;
+  if (status === 'maintenance') return COLORS.error;
+  return COLORS.primary;
+}
+
+function getCapacityYards(size) {
+  const num = parseInt(size);
+  return isNaN(num) ? size : `${num} Yards`;
+}
 
 export default function InventoryScreen() {
   const { state, dispatch } = useApp();
-  const [activeFilter, setActiveFilter] = useState('All');
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const dumpsters = state.dumpsters || [];
-
-  const counts = useMemo(() => ({
-    available: dumpsters.filter((d) => d.status === 'available').length,
-    deployed: dumpsters.filter((d) => d.status === 'deployed').length,
-    maintenance: dumpsters.filter((d) => d.status === 'maintenance').length,
-  }), [dumpsters]);
+  const counts = useMemo(() => {
+    let available = 0, deployed = 0, maintenance = 0;
+    state.dumpsters.forEach((d) => {
+      if (d.status === 'available') available++;
+      else if (d.status === 'deployed') deployed++;
+      else if (d.status === 'maintenance') maintenance++;
+    });
+    return { available, deployed, maintenance };
+  }, [state.dumpsters]);
 
   const filteredDumpsters = useMemo(() => {
-    if (activeFilter === 'All') return dumpsters;
-    return dumpsters.filter(
-      (d) => d.status === activeFilter.toLowerCase()
+    if (!searchQuery.trim()) return state.dumpsters;
+    const q = searchQuery.toLowerCase();
+    return state.dumpsters.filter(
+      (d) => d.id.toLowerCase().includes(q) || d.size.toLowerCase().includes(q) || (d.sizeLabel && d.sizeLabel.toLowerCase().includes(q))
     );
-  }, [dumpsters, activeFilter]);
+  }, [state.dumpsters, searchQuery]);
 
-  const handleStatusChange = (dumpsterId, newStatus) => {
-    dispatch({
-      type: 'UPDATE_DUMPSTER',
-      payload: { id: dumpsterId, status: newStatus },
-    });
-  };
+  function getLinkedBooking(dumpster) {
+    if (dumpster.status !== 'deployed' || !dumpster.assignedBooking) return null;
+    return state.bookings.find((b) => b.id === dumpster.assignedBooking) || null;
+  }
 
-  const handleAddDumpster = () => {
-    const nextId = dumpsters.length + 1;
-    const padded = String(nextId).padStart(2, '0');
-    dispatch({
-      type: 'ADD_DUMPSTER',
-      payload: {
-        id: `20YD-${padded}`,
-        size: 20,
-        sizeLabel: '20 Yard',
-        status: 'available',
-        assignedBooking: null,
-      },
-    });
-  };
+  function handleStatusChange(dumpsterId, newStatus) {
+    dispatch({ type: 'UPDATE_DUMPSTER', payload: { id: dumpsterId, status: newStatus } });
+  }
 
-  const renderDumpsterCard = ({ item }) => {
-    const statusCfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.available;
+  function renderDumpsterCard({ item: dumpster }) {
+    const statusColor = getStatusColor(dumpster.status);
+    const linkedBooking = getLinkedBooking(dumpster);
+    const isDeployed = dumpster.status === 'deployed';
 
     return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.dumpsterId}>{item.id}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: statusCfg.color + '22' }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusCfg.color }]} />
-              <Text style={[styles.statusText, { color: statusCfg.color }]}>
-                {statusCfg.label}
-              </Text>
-            </View>
+      <View
+        style={{
+          backgroundColor: COLORS.surface_container_low,
+          padding: 20,
+          borderRadius: 16,
+          marginBottom: 16,
+          ...(isDeployed ? { borderLeftWidth: 4, borderLeftColor: COLORS.tertiary } : {}),
+        }}
+      >
+        {/* Top row */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <View>
+            <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 10, color: COLORS.on_surface_variant, marginBottom: 4 }}>
+              {getCategoryLabel(dumpster.size)}
+            </Text>
+            <Text style={{ fontSize: 28, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5 }}>
+              {dumpster.id}
+            </Text>
           </View>
-          <Text style={styles.sizeLabel}>{item.sizeLabel}</Text>
-          {item.status === 'deployed' && item.assignedBooking && (
-            <View style={styles.bookingRow}>
-              <Ionicons name="document-text-outline" size={14} color={textSecondary} />
-              <Text style={styles.bookingText}>
-                Booking: {item.assignedBooking}
-              </Text>
-            </View>
-          )}
+          <View style={{
+            backgroundColor: statusColor === COLORS.primary ? 'rgba(255,183,125,0.1)' : statusColor === COLORS.tertiary ? 'rgba(133,207,255,0.1)' : 'rgba(255,180,171,0.1)',
+            paddingHorizontal: 12,
+            paddingVertical: 4,
+            borderRadius: 9999,
+          }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: statusColor, textTransform: 'uppercase', letterSpacing: 1 }}>
+              {dumpster.status}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.statusActions}>
-          <Text style={styles.statusActionsLabel}>Change status:</Text>
-          <View style={styles.statusButtons}>
-            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
-              const isActive = item.status === key;
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={[
-                    styles.statusButton,
-                    isActive && { backgroundColor: cfg.color + '33', borderColor: cfg.color },
-                  ]}
-                  onPress={() => handleStatusChange(item.id, key)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      { color: isActive ? cfg.color : textMuted },
-                    ]}
-                  >
-                    {cfg.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+        {/* Content */}
+        {dumpster.status === 'available' || dumpster.status === 'maintenance' ? (
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
+            <View>
+              <Text style={{ fontSize: 11, color: COLORS.on_surface_variant, marginBottom: 4 }}>Capacity</Text>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.on_surface }}>
+                {getCapacityYards(dumpster.size)}
+              </Text>
+            </View>
+            <Image
+              source={{ uri: DUMPSTER_IMAGES[dumpster.size] }}
+              style={{ width: 100, height: 70, borderRadius: 8 }}
+              resizeMode="contain"
+            />
           </View>
+        ) : (
+          <View style={{ gap: 12, marginBottom: 20 }}>
+            {linkedBooking && (
+              <>
+                <TouchableOpacity
+                  onPress={() => router.push(`/booking/${linkedBooking.id}`)}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    backgroundColor: COLORS.surface_container_lowest,
+                    padding: 12,
+                    borderRadius: 10,
+                  }}
+                >
+                  <View>
+                    <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>
+                      Active Booking
+                    </Text>
+                    <Text style={{ fontWeight: '700', fontSize: 14, color: COLORS.on_surface, fontFamily: 'monospace' }}>
+                      #{linkedBooking.id}
+                    </Text>
+                  </View>
+                  <Text style={{ color: COLORS.tertiary, fontSize: 18 }}>{'\u2197'}</Text>
+                </TouchableOpacity>
+                <View style={{ paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 11, color: COLORS.on_surface_variant, marginBottom: 2 }}>Location</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.on_surface }} numberOfLines={1}>
+                    {linkedBooking.deliveryAddress}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Status Segment Control */}
+        <View style={{ flexDirection: 'row', gap: 4, padding: 4, backgroundColor: COLORS.surface_container_lowest, borderRadius: 9999 }}>
+          {['available', 'deployed', 'maintenance'].map((s) => {
+            const isActive = dumpster.status === s;
+            const label = s === 'available' ? 'Available' : s === 'deployed' ? 'Deployed' : 'Service';
+            let bgColor = 'transparent';
+            let textColor = COLORS.on_surface_variant;
+            if (isActive) {
+              if (s === 'available') { bgColor = COLORS.primary; textColor = COLORS.on_primary; }
+              else if (s === 'deployed') { bgColor = COLORS.tertiary; textColor = COLORS.on_tertiary; }
+              else { bgColor = COLORS.error; textColor = '#690005'; }
+            }
+            return (
+              <TouchableOpacity
+                key={s}
+                onPress={() => handleStatusChange(dumpster.id, s)}
+                style={{ flex: 1, paddingVertical: 8, borderRadius: 9999, backgroundColor: bgColor, alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.5, color: textColor }}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
     );
-  };
+  }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>Inventory</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{dumpsters.length}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Summary badges */}
-      <View style={styles.summaryRow}>
-        <View style={[styles.summaryBadge, { backgroundColor: success + '1A' }]}>
-          <View style={[styles.summaryDot, { backgroundColor: success }]} />
-          <Text style={[styles.summaryCount, { color: success }]}>{counts.available}</Text>
-          <Text style={styles.summaryLabel}>Available</Text>
-        </View>
-        <View style={[styles.summaryBadge, { backgroundColor: primary + '1A' }]}>
-          <View style={[styles.summaryDot, { backgroundColor: primary }]} />
-          <Text style={[styles.summaryCount, { color: primary }]}>{counts.deployed}</Text>
-          <Text style={styles.summaryLabel}>Deployed</Text>
-        </View>
-        <View style={[styles.summaryBadge, { backgroundColor: danger + '1A' }]}>
-          <View style={[styles.summaryDot, { backgroundColor: danger }]} />
-          <Text style={[styles.summaryCount, { color: danger }]}>{counts.maintenance}</Text>
-          <Text style={styles.summaryLabel}>Maintenance</Text>
-        </View>
-      </View>
-
-      {/* Filter tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterContainer}
-      >
-        {FILTERS.map((filter) => {
-          const isActive = activeFilter === filter;
-          return (
-            <TouchableOpacity
-              key={filter}
-              style={[styles.filterTab, isActive && styles.filterTabActive]}
-              onPress={() => setActiveFilter(filter)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterTabText, isActive && styles.filterTabTextActive]}>
-                {filter}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Dumpster list */}
+    <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <FlatList
         data={filteredDumpsters}
         keyExtractor={(item) => item.id}
         renderItem={renderDumpsterCard}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="cube-outline" size={48} color={textMuted} />
-            <Text style={styles.emptyText}>No dumpsters found</Text>
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+        ListHeaderComponent={
+          <View>
+            {/* Title */}
+            <Text style={{ fontSize: 32, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5, marginBottom: 16 }}>
+              Inventory Mgmt
+            </Text>
+
+            {/* Summary Chips */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+              {/* Available */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
+                <Text style={{ fontSize: 16, color: COLORS.primary }}>{'\u2713'}</Text>
+                <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 16 }}>{counts.available}</Text>
+                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Available</Text>
+              </View>
+              {/* Deployed */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
+                <Text style={{ fontSize: 16, color: COLORS.tertiary }}>{'\u{1F69B}'}</Text>
+                <Text style={{ color: COLORS.tertiary, fontWeight: '700', fontSize: 16 }}>{counts.deployed}</Text>
+                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Deployed</Text>
+              </View>
+              {/* Maintenance */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
+                <Text style={{ fontSize: 16, color: COLORS.error }}>{'\u{1F527}'}</Text>
+                <Text style={{ color: COLORS.error, fontWeight: '700', fontSize: 16 }}>{counts.maintenance}</Text>
+                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Maintenance</Text>
+              </View>
+            </View>
+
+            {/* Search */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <View style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: COLORS.surface_container_highest,
+                borderRadius: 10,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                gap: 8,
+              }}>
+                <Text style={{ color: COLORS.on_surface_variant, fontSize: 16 }}>{'\u{1F50D}'}</Text>
+                <TextInput
+                  style={{ flex: 1, color: COLORS.on_surface, fontSize: 14 }}
+                  placeholder="Search by ID or size..."
+                  placeholderTextColor="rgba(221,193,174,0.5)"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+            </View>
           </View>
         }
       />
 
-      {/* FAB - Add Dumpster */}
-      <TouchableOpacity style={styles.fab} onPress={handleAddDumpster} activeOpacity={0.8}>
-        <Ionicons name="add" size={28} color={text} />
+      {/* FAB */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          bottom: 90,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: COLORS.primary,
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 8,
+        }}
+        onPress={() => {}}
+      >
+        <Text style={{ fontSize: 28, fontWeight: '700', color: COLORS.on_primary, marginTop: -2 }}>+</Text>
       </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: bg,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: text,
-  },
-  countBadge: {
-    backgroundColor: primary,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    minWidth: 28,
-    alignItems: 'center',
-  },
-  countBadgeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: text,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  summaryBadge: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 6,
-  },
-  summaryDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  summaryCount: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  summaryLabel: {
-    fontSize: 11,
-    color: textSecondary,
-    flex: 1,
-  },
-  filterContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  filterTab: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: bgElevated,
-    borderWidth: 1,
-    borderColor: border,
-  },
-  filterTabActive: {
-    backgroundColor: primary,
-    borderColor: primary,
-  },
-  filterTabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: textSecondary,
-  },
-  filterTabTextActive: {
-    color: text,
-    fontWeight: '600',
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  card: {
-    backgroundColor: bgCard,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: border,
-  },
-  cardHeader: {
-    marginBottom: 12,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  dumpsterId: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: text,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 6,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  sizeLabel: {
-    fontSize: 14,
-    color: textSecondary,
-  },
-  bookingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-    gap: 6,
-  },
-  bookingText: {
-    fontSize: 13,
-    color: textSecondary,
-  },
-  statusActions: {
-    borderTopWidth: 1,
-    borderTopColor: border,
-    paddingTop: 12,
-  },
-  statusActionsLabel: {
-    fontSize: 12,
-    color: textMuted,
-    marginBottom: 8,
-  },
-  statusButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  statusButton: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: border,
-    alignItems: 'center',
-    backgroundColor: bgInput,
-  },
-  statusButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: textMuted,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-});

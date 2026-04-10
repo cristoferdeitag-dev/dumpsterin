@@ -7,19 +7,25 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveTintColor: '#ffb77d',
+        tabBarActiveBackgroundColor: 'rgba(255, 183, 125, 0.1)',
+        tabBarInactiveTintColor: '#737373',
         tabBarStyle: {
-          backgroundColor: colors.bgCard,
-          borderTopColor: colors.border,
+          backgroundColor: 'rgba(23, 23, 23, 0.8)',
+          borderTopColor: 'rgba(86, 67, 52, 0.2)',
           borderTopWidth: 1,
-          height: 60,
+          height: 72,
           paddingBottom: 8,
           paddingTop: 4,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '600',
+          letterSpacing: 1.5,
+          textTransform: 'uppercase',
+        },
+        tabBarIconStyle: {
+          size: 24,
         },
       }}
     >
@@ -27,42 +33,42 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="bookings"
         options={{
           title: 'Bookings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="list" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color, size }) => <Ionicons name="map" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="map" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="schedule"
         options={{
           title: 'Schedule',
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="calendar" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="inventory"
         options={{
           title: 'Inventory',
-          tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="cube" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="settings" size={24} color={color} />,
         }}
       />
     </Tabs>
