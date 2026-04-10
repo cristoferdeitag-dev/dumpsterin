@@ -26,6 +26,8 @@ const DETAIL_FILTERS = [
   { id: 'in_transit', label: 'In Transit' },
   { id: 'delivered', label: 'Delivered' },
   { id: 'pickup_ready', label: 'Pickup' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'cancelled', label: 'Cancelled' },
 ];
 
 export default function BookingsScreen() {
@@ -199,38 +201,39 @@ export default function BookingsScreen() {
       </View>
 
       {/* Status Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 8 }}
-      >
-        {DETAIL_FILTERS.map((filter) => (
-          <TouchableOpacity
-            key={filter.id}
-            onPress={() => {
-              setDetailFilter(filter.id);
-              setTopFilter('all');
-            }}
-            style={{
-              backgroundColor: detailFilter === filter.id ? '#353535' : '#1c1b1b',
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              borderRadius: 9999,
-              borderWidth: detailFilter === filter.id ? 1 : 0,
-              borderColor: detailFilter === filter.id ? 'rgba(255, 183, 125, 0.3)' : 'transparent',
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={{
-              color: detailFilter === filter.id ? '#ffb77d' : '#ddc1ae',
-              fontSize: 13,
-              fontWeight: detailFilter === filter.id ? '700' : '500',
-            }}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {DETAIL_FILTERS.map((filter, idx) => (
+              <TouchableOpacity
+                key={filter.id}
+                onPress={() => {
+                  setDetailFilter(filter.id);
+                  setTopFilter('all');
+                }}
+                style={{
+                  backgroundColor: detailFilter === filter.id ? '#353535' : '#1c1b1b',
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 9999,
+                  borderWidth: detailFilter === filter.id ? 1 : 0,
+                  borderColor: detailFilter === filter.id ? 'rgba(255, 183, 125, 0.3)' : 'transparent',
+                  marginRight: idx < DETAIL_FILTERS.length - 1 ? 8 : 0,
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{
+                  color: detailFilter === filter.id ? '#ffb77d' : '#ddc1ae',
+                  fontSize: 13,
+                  fontWeight: detailFilter === filter.id ? '700' : '500',
+                }}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
 
       {/* Booking List */}
       <FlatList
