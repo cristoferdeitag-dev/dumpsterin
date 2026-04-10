@@ -99,18 +99,31 @@ export default function CreateBooking() {
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('');
 
-  // Customer autocomplete from Stripe data (stored in state.customers when available)
-  const customers = state.customers || [];
-  const filteredCustomers = useMemo(() => {
-    if (!customerSearch || customerSearch.length < 2) return [];
-    const q = customerSearch.toLowerCase();
-    return customers.filter(
-      (c) =>
-        (c.name && c.name.toLowerCase().includes(q)) ||
-        (c.email && c.email.toLowerCase().includes(q)) ||
-        (c.phone && c.phone.includes(q))
-    ).slice(0, 8);
-  }, [customerSearch, customers]);
+  // Customer autocomplete from Stripe API
+  const [stripeCustomers, setStripeCustomers] = useState([]);
+  const [searchTimeout, setSearchTimeout] = useState(null);
+
+  const searchStripeCustomers = useCallback((query) => {
+    if (!query || query.length < 2) {
+      setStripeCustomers([]);
+      return;
+    }
+    if (searchTimeout) clearTimeout(searchTimeout);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://dumpsterin.com/api/customers.php?q=${encodeURIComponent(query)}&limit=8`
+        );
+        const data = await res.json();
+        setStripeCustomers(data.customers || []);
+      } catch (e) {
+        setStripeCustomers([]);
+      }
+    }, 300); // debounce 300ms
+    setSearchTimeout(t);
+  }, [searchTimeout]);
+
+  const filteredCustomers = stripeCustomers;
 
   const selectCustomer = useCallback((customer) => {
     setName(customer.name || '');
@@ -283,6 +296,7 @@ export default function CreateBooking() {
                 setName(val);
                 setCustomerSearch(val);
                 setShowCustomerDropdown(true);
+                searchStripeCustomers(val);
               }}
               placeholder="Type to search existing customers..."
               placeholderTextColor={textMuted}
@@ -301,11 +315,11 @@ export default function CreateBooking() {
                 ))}
               </View>
             )}
-            {customers.length === 0 && name.length >= 2 && showCustomerDropdown && (
+            {filteredCustomers.length === 0 && name.length >= 2 && showCustomerDropdown && (
               <View style={styles.dropdownHint}>
-                <Ionicons name="information-circle-outline" size={14} color={textMuted} />
+                <Ionicons name="search-outline" size={14} color={textMuted} />
                 <Text style={styles.dropdownHintText}>
-                  Connect Stripe to autocomplete customers
+                  No matching customers found in Stripe
                 </Text>
               </View>
             )}
