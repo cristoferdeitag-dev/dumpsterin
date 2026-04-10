@@ -276,6 +276,9 @@ export default function CreateBooking() {
   const [driverId, setDriverId] = useState('');
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('');
+  const [generatedBy, setGeneratedBy] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [sendingQuote, setSendingQuote] = useState(false);
 
   // Customer autocomplete from Stripe API
   const [stripeCustomers, setStripeCustomers] = useState([]);
@@ -392,39 +395,99 @@ export default function CreateBooking() {
     return base - disc + specialTotal;
   }, [basePrice, discount, selectedSpecialItems]);
 
-  const handleSubmit = () => {
-    if (!name.trim()) return Alert.alert('Required', 'Customer name is required.');
-    if (!fullDeliveryAddress.trim()) return Alert.alert('Required', 'Delivery address is required.');
-    if (!deliveryDate) return Alert.alert('Required', 'Delivery date is required.');
-    if (!dumpsterSize) return Alert.alert('Required', 'Dumpster size is required.');
-    if (!serviceType) return Alert.alert('Required', 'Service type is required.');
-    if (!basePrice || parseFloat(basePrice) <= 0)
-      return Alert.alert('Required', 'Base price must be greater than 0.');
+  const validateForm = () => {
+    if (!name.trim()) { Alert.alert('Required', 'Customer name is required.'); return false; }
+    if (!fullDeliveryAddress.trim()) { Alert.alert('Required', 'Delivery address is required.'); return false; }
+    if (!deliveryDate) { Alert.alert('Required', 'Delivery date is required.'); return false; }
+    if (!dumpsterSize) { Alert.alert('Required', 'Dumpster size is required.'); return false; }
+    if (!serviceType) { Alert.alert('Required', 'Service type is required.'); return false; }
+    if (!basePrice || parseFloat(basePrice) <= 0) { Alert.alert('Required', 'Base price must be greater than 0.'); return false; }
+    if (!generatedBy) { Alert.alert('Required', 'Please select who generated this quote.'); return false; }
+    return true;
+  };
 
-    const bookingObj = {
-      customerName: name.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      billingAddress: fullBillingAddress,
-      deliveryAddress: fullDeliveryAddress,
-      deliveryDate,
-      deliveryWindow: deliveryWindow || 'morning',
-      dumpsterSize,
-      serviceType,
-      materialType: material.trim(),
-      basePrice: parseFloat(basePrice) || 0,
-      discount: parseFloat(discount) || 0,
-      specialItems: Object.values(selectedSpecialItems),
-      assignedDumpster: dumpsterId || null,
-      assignedDriver: driverId || null,
-      notes: notes.trim(),
-      source: source || 'phone',
-      status: 'scheduled',
-      total,
-    };
+  const buildBookingObj = (status) => ({
+    customerName: name.trim(),
+    phone: phone.trim(),
+    email: email.trim(),
+    billingAddress: fullBillingAddress,
+    deliveryAddress: fullDeliveryAddress,
+    deliveryDate,
+    deliveryWindow: deliveryWindow || 'morning',
+    dumpsterSize,
+    serviceType,
+    materialType: material.trim(),
+    basePrice: parseFloat(basePrice) || 0,
+    discount: parseFloat(discount) || 0,
+    specialItems: Object.values(selectedSpecialItems),
+    assignedDumpster: dumpsterId || null,
+    assignedDriver: driverId || null,
+    notes: notes.trim(),
+    source: source || 'phone',
+    generatedBy,
+    paymentMethod: paymentMethod || null,
+    status,
+    total,
+  });
 
-    dispatch({ type: 'ADD_BOOKING', payload: bookingObj });
+  // BOOK DIRECT — creates booking immediately
+  const handleBookDirect = () => {
+    if (!validateForm()) return;
+    if (!paymentMethod) { Alert.alert('Required', 'Please select payment method for direct booking.'); return; }
+
+    dispatch({ type: 'ADD_BOOKING', payload: buildBookingObj('scheduled') });
+    Alert.alert('Booking Created', `Booking created for ${name.trim()}. Payment: ${paymentMethod}.`);
     router.back();
+  };
+
+  // SEND QUOTE — creates Stripe invoice + sends email & SMS
+  const handleSendQuote = async () => {
+    if (!validateForm()) return;
+    if (!email.trim() && !phone.trim()) {
+      Alert.alert('Required', 'Email or phone is required to send a quote.');
+      return;
+    }
+
+    setSendingQuote(true);
+    try {
+      const res = await fetch('https://dumpsterin.com/api/quote.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: name.trim(),
+          phone: phone.trim(),
+          email: email.trim(),
+          billingAddress: fullBillingAddress,
+          deliveryAddress: fullDeliveryAddress,
+          deliveryDate,
+          deliveryWindow: deliveryWindow || 'morning',
+          dumpsterSize,
+          serviceType,
+          basePrice: parseFloat(basePrice) || 0,
+          discount: parseFloat(discount) || 0,
+          specialItems: Object.values(selectedSpecialItems),
+          total,
+          generatedBy,
+          notes: notes.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Save as pending booking
+        dispatch({ type: 'ADD_BOOKING', payload: buildBookingObj('quote_sent') });
+        Alert.alert(
+          'Quote Sent!',
+          `Invoice sent to ${email.trim() || phone.trim()}.\nStripe Invoice: ${data.invoiceId || 'created'}`,
+        );
+        router.back();
+      } else {
+        Alert.alert('Error', data.error || 'Failed to send quote. Try again.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Could not connect to server. Check your connection.');
+    } finally {
+      setSendingQuote(false);
+    }
   };
 
   // ── Render helpers ──
@@ -1001,6 +1064,17 @@ export default function CreateBooking() {
           </ScrollView>
         </View>
 
+        {/* ── GENERATED BY ── */}
+        <View style={s.card}>
+          {renderSectionHeader('person-circle', 'Sales Rep')}
+
+          <Text style={s.label}>Generated by <Text style={{ color: danger }}>*</Text></Text>
+          <View style={s.pillRow}>
+            {renderPill('Owner', generatedBy === 'owner', () => setGeneratedBy('owner'))}
+            {renderPill('Asai', generatedBy === 'asai', () => setGeneratedBy('asai'))}
+          </View>
+        </View>
+
         {/* ── NOTES & SOURCE ── */}
         <View style={s.card}>
           {renderSectionHeader('document-text', 'Notes & Source')}
@@ -1044,11 +1118,51 @@ export default function CreateBooking() {
           )}
         </View>
 
-        {/* ── Submit ── */}
-        <TouchableOpacity style={s.submitBtn} onPress={handleSubmit} activeOpacity={0.85}>
-          <Ionicons name="add-circle" size={22} color="#FFFFFF" />
-          <Text style={s.submitBtnText}>Create Booking</Text>
-        </TouchableOpacity>
+        {/* ── ACTIONS ── */}
+        <View style={s.card}>
+          {renderSectionHeader('flash', 'Action')}
+
+          {/* Payment Method — for direct booking */}
+          <Text style={s.label}>Payment Method</Text>
+          <View style={s.pillRow}>
+            {renderPill('Cash', paymentMethod === 'cash', () => setPaymentMethod('cash'))}
+            {renderPill('Check', paymentMethod === 'check', () => setPaymentMethod('check'))}
+            {renderPill('Card', paymentMethod === 'card', () => setPaymentMethod('card'))}
+            {renderPill('Zelle', paymentMethod === 'zelle', () => setPaymentMethod('zelle'))}
+          </View>
+
+          {/* Two action buttons */}
+          <View style={{ marginTop: 20, gap: 12 }}>
+            {/* Send Quote */}
+            <TouchableOpacity
+              style={[s.submitBtn, { backgroundColor: '#ff8c00' }]}
+              onPress={handleSendQuote}
+              activeOpacity={0.85}
+              disabled={sendingQuote}
+            >
+              <Ionicons name="send" size={20} color="#4d2600" />
+              <Text style={[s.submitBtnText, { color: '#4d2600' }]}>
+                {sendingQuote ? 'Sending...' : 'Send Quote'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={{ textAlign: 'center', fontSize: 11, color: textMuted, marginTop: -6 }}>
+              Sends Stripe invoice + SMS to client
+            </Text>
+
+            {/* Book Direct */}
+            <TouchableOpacity
+              style={[s.submitBtn, { backgroundColor: '#353535', marginTop: 4 }]}
+              onPress={handleBookDirect}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="add-circle" size={20} color="#e5e2e1" />
+              <Text style={[s.submitBtnText, { color: '#e5e2e1' }]}>Book Direct</Text>
+            </TouchableOpacity>
+            <Text style={{ textAlign: 'center', fontSize: 11, color: textMuted, marginTop: -6 }}>
+              Creates booking immediately (client already paid)
+            </Text>
+          </View>
+        </View>
 
         <View style={{ height: 48 }} />
       </ScrollView>

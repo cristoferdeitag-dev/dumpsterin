@@ -277,6 +277,7 @@ export const initialBookings = [
 
 // Status flow
 export const BOOKING_STATUSES = [
+  { id: 'quote_sent', label: 'Quote Sent', icon: 'send' },
   { id: 'scheduled', label: 'Scheduled', icon: 'calendar' },
   { id: 'in_transit', label: 'In Transit', icon: 'truck-delivery' },
   { id: 'delivered', label: 'Delivered', icon: 'package-variant' },
