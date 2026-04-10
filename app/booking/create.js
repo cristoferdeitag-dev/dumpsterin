@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   SafeAreaView,
   Alert,
   Modal,
-  FlatList,
+  Platform,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
@@ -38,9 +38,10 @@ import {
   textMuted,
 } from '../../src/theme/colors';
 
+const GOOGLE_MAPS_API_KEY = 'AIzaSyAWkJznwQtNDv_MhFhdYvqBdfzAa3IIMew';
 const SOURCE_OPTIONS = ['phone', 'website', 'walkin'];
 
-// Calendar theme matching the app
+// ── Calendar theme ──
 const calendarTheme = {
   backgroundColor: bgCard,
   calendarBackground: bgCard,
@@ -62,6 +63,178 @@ const calendarTheme = {
   },
 };
 
+// ── Google Places Autocomplete Component (web-only) ──
+function AddressAutocomplete({ value, onChangeText, onAddressSelect, placeholder, style }) {
+  const [predictions, setPredictions] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const autocompleteService = useRef(null);
+  const placesService = useRef(null);
+  const sessionToken = useRef(null);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (window.google && window.google.maps && window.google.maps.places) {
+      initServices();
+      return;
+    }
+    // Check if script is already being loaded
+    if (document.querySelector(`script[src*="maps.googleapis.com"]`)) {
+      const interval = setInterval(() => {
+        if (window.google && window.google.maps && window.google.maps.places) {
+          initServices();
+          clearInterval(interval);
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.onload = () => initServices();
+    document.head.appendChild(script);
+  }, []);
+
+  const initServices = () => {
+    try {
+      autocompleteService.current = new window.google.maps.places.AutocompleteService();
+      // PlacesService requires a div element
+      const div = document.createElement('div');
+      placesService.current = new window.google.maps.places.PlacesService(div);
+      sessionToken.current = new window.google.maps.places.AutocompleteSessionToken();
+    } catch (e) {
+      // Silently fail if API not available
+    }
+  };
+
+  const fetchPredictions = useCallback((text) => {
+    if (!autocompleteService.current || text.length < 3) {
+      setPredictions([]);
+      setShowDropdown(false);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      autocompleteService.current.getPlacePredictions(
+        {
+          input: text,
+          componentRestrictions: { country: 'us' },
+          types: ['address'],
+          sessionToken: sessionToken.current,
+        },
+        (results, status) => {
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+            setPredictions(results.slice(0, 5));
+            setShowDropdown(true);
+          } else {
+            setPredictions([]);
+            setShowDropdown(false);
+          }
+        }
+      );
+    }, 300);
+  }, []);
+
+  const handleSelect = useCallback((prediction) => {
+    setShowDropdown(false);
+    setPredictions([]);
+    onChangeText(prediction.description);
+
+    if (!placesService.current) {
+      onAddressSelect({ street: prediction.description, city: '', state: 'CA', zip: '' });
+      return;
+    }
+
+    placesService.current.getDetails(
+      {
+        placeId: prediction.place_id,
+        fields: ['address_components', 'formatted_address'],
+        sessionToken: sessionToken.current,
+      },
+      (place, status) => {
+        // Refresh token after getDetails
+        if (window.google && window.google.maps && window.google.maps.places) {
+          sessionToken.current = new window.google.maps.places.AutocompleteSessionToken();
+        }
+        if (status !== window.google.maps.places.PlacesServiceStatus.OK || !place) {
+          onAddressSelect({ street: prediction.description, city: '', state: 'CA', zip: '' });
+          return;
+        }
+        const components = place.address_components || [];
+        const get = (type) => {
+          const c = components.find((c) => c.types.includes(type));
+          return c ? c.long_name : '';
+        };
+        const getShort = (type) => {
+          const c = components.find((c) => c.types.includes(type));
+          return c ? c.short_name : '';
+        };
+        const streetNumber = get('street_number');
+        const route = get('route');
+        const street = [streetNumber, route].filter(Boolean).join(' ');
+        onAddressSelect({
+          street: street || prediction.structured_formatting?.main_text || '',
+          city: get('locality') || get('sublocality_level_1') || get('administrative_area_level_2') || '',
+          state: getShort('administrative_area_level_1') || 'CA',
+          zip: get('postal_code') || '',
+        });
+      }
+    );
+  }, [onChangeText, onAddressSelect]);
+
+  return (
+    <View style={s.acWrap}>
+      <TextInput
+        style={[
+          s.input,
+          isFocused && s.inputFocused,
+          value.length > 0 && s.inputFilled,
+          style,
+        ]}
+        value={value}
+        onChangeText={(text) => {
+          onChangeText(text);
+          if (Platform.OS === 'web') fetchPredictions(text);
+        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => {
+          setIsFocused(false);
+          // Delay hiding so tap can register
+          setTimeout(() => setShowDropdown(false), 250);
+        }}
+        placeholder={placeholder}
+        placeholderTextColor={textMuted}
+      />
+      {showDropdown && predictions.length > 0 && (
+        <View style={s.acDropdown}>
+          {predictions.map((p) => (
+            <TouchableOpacity
+              key={p.place_id}
+              style={s.acItem}
+              onPress={() => handleSelect(p)}
+            >
+              <Ionicons name="location-outline" size={16} color={primary} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.acMainText} numberOfLines={1}>
+                  {p.structured_formatting?.main_text || p.description}
+                </Text>
+                <Text style={s.acSecText} numberOfLines={1}>
+                  {p.structured_formatting?.secondary_text || ''}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+          <View style={s.acPowered}>
+            <Text style={s.acPoweredText}>Powered by Google</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Main Component ──
 export default function CreateBooking() {
   const router = useRouter();
   const { state, dispatch } = useApp();
@@ -119,7 +292,7 @@ export default function CreateBooking() {
       } catch (e) {
         setStripeCustomers([]);
       }
-    }, 300); // debounce 300ms
+    }, 300);
     setSearchTimeout(t);
   }, [searchTimeout]);
 
@@ -145,13 +318,17 @@ export default function CreateBooking() {
     setShowCustomerDropdown(false);
   }, []);
 
-  // Full delivery address string
+  // Full address strings
+  const fullBillingAddress = useMemo(() => {
+    return [billingAddress, billingCity, billingState, billingZip].filter(Boolean).join(', ');
+  }, [billingAddress, billingCity, billingState, billingZip]);
+
   const fullDeliveryAddress = useMemo(() => {
     if (sameAsBilling) {
-      return [billingAddress, billingCity, billingState, billingZip].filter(Boolean).join(', ');
+      return fullBillingAddress;
     }
     return [deliveryAddress, deliveryCity, deliveryState, deliveryZip].filter(Boolean).join(', ');
-  }, [sameAsBilling, billingAddress, billingCity, billingState, billingZip, deliveryAddress, deliveryCity, deliveryState, deliveryZip]);
+  }, [sameAsBilling, fullBillingAddress, deliveryAddress, deliveryCity, deliveryState, deliveryZip]);
 
   // Smart inventory
   const { availableNow, availableSoon } = useMemo(() => {
@@ -223,7 +400,7 @@ export default function CreateBooking() {
       customerName: name.trim(),
       phone: phone.trim(),
       email: email.trim(),
-      billingAddress: [billingAddress, billingCity, billingState, billingZip].filter(Boolean).join(', '),
+      billingAddress: fullBillingAddress,
       deliveryAddress: fullDeliveryAddress,
       deliveryDate,
       deliveryWindow: deliveryWindow || 'morning',
@@ -245,19 +422,30 @@ export default function CreateBooking() {
     router.back();
   };
 
+  // ── Render helpers ──
+
   const renderPill = (label, isSelected, onPress, color) => (
     <TouchableOpacity
       key={label}
       style={[
-        styles.pill,
-        isSelected && { backgroundColor: (color || primary) + '22', borderColor: color || primary },
+        s.pill,
+        isSelected && {
+          backgroundColor: (color || primary) + '18',
+          borderColor: color || primary,
+          shadowColor: color || primary,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 4,
+        },
       ]}
       onPress={onPress}
+      activeOpacity={0.7}
     >
       <Text
         style={[
-          styles.pillText,
-          isSelected && { color: color || primary, fontWeight: '600' },
+          s.pillText,
+          isSelected && { color: color || primary, fontWeight: '700' },
         ]}
       >
         {label}
@@ -265,32 +453,44 @@ export default function CreateBooking() {
     </TouchableOpacity>
   );
 
+  const renderSectionHeader = (icon, title) => (
+    <View style={s.sectionHeaderRow}>
+      <View style={s.sectionIconWrap}>
+        <Ionicons name={icon} size={16} color={primary} />
+      </View>
+      <Text style={s.sectionTitle}>{title}</Text>
+      <View style={s.sectionDivider} />
+    </View>
+  );
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={textColor} />
+    <SafeAreaView style={s.container}>
+      {/* ── Header ── */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={22} color={textColor} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Booking</Text>
-        <View style={{ width: 40 }} />
+        <Text style={s.headerTitle}>New Booking</Text>
+        <View style={{ width: 44 }} />
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
 
         {/* ── CUSTOMER INFO ── */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="person" size={18} color={primary} />
-            <Text style={styles.sectionTitle}>Customer Info</Text>
-          </View>
+        <View style={s.card}>
+          {renderSectionHeader('person', 'Customer Info')}
 
-          {/* Name with autocomplete */}
-          <Text style={styles.label}>
-            Name <Text style={styles.required}>*</Text>
+          <Text style={s.label}>
+            Name <Text style={s.required}>*</Text>
           </Text>
-          <View style={styles.autocompleteWrap}>
+          <View style={s.acWrap}>
             <TextInput
-              style={styles.input}
+              style={[s.input, name.length > 0 && s.inputFilled]}
               value={name}
               onChangeText={(val) => {
                 setName(val);
@@ -298,38 +498,39 @@ export default function CreateBooking() {
                 setShowCustomerDropdown(true);
                 searchStripeCustomers(val);
               }}
-              placeholder="Type to search existing customers..."
+              placeholder="Search existing customers..."
               placeholderTextColor={textMuted}
             />
             {showCustomerDropdown && filteredCustomers.length > 0 && (
-              <View style={styles.dropdown}>
+              <View style={s.acDropdown}>
                 {filteredCustomers.map((c) => (
                   <TouchableOpacity
                     key={c.id || c.email}
-                    style={styles.dropdownItem}
+                    style={s.acItem}
                     onPress={() => selectCustomer(c)}
                   >
-                    <Text style={styles.dropdownName}>{c.name}</Text>
-                    <Text style={styles.dropdownSub}>{c.email || c.phone}</Text>
+                    <Ionicons name="person-circle-outline" size={18} color={primaryLight} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.acMainText}>{c.name}</Text>
+                      <Text style={s.acSecText}>{c.email || c.phone}</Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </View>
             )}
             {filteredCustomers.length === 0 && name.length >= 2 && showCustomerDropdown && (
-              <View style={styles.dropdownHint}>
-                <Ionicons name="search-outline" size={14} color={textMuted} />
-                <Text style={styles.dropdownHintText}>
-                  No matching customers found in Stripe
-                </Text>
+              <View style={s.acHintRow}>
+                <Ionicons name="search-outline" size={13} color={textMuted} />
+                <Text style={s.acHintText}>No matching customers in Stripe</Text>
               </View>
             )}
           </View>
 
-          <View style={styles.twoCol}>
-            <View style={styles.col}>
-              <Text style={styles.label}>Phone</Text>
+          <View style={s.row}>
+            <View style={s.col}>
+              <Text style={s.label}>Phone</Text>
               <TextInput
-                style={styles.input}
+                style={[s.input, phone.length > 0 && s.inputFilled]}
                 value={phone}
                 onChangeText={setPhone}
                 placeholder="(510) 555-0000"
@@ -337,10 +538,10 @@ export default function CreateBooking() {
                 keyboardType="phone-pad"
               />
             </View>
-            <View style={styles.col}>
-              <Text style={styles.label}>Email</Text>
+            <View style={s.col}>
+              <Text style={s.label}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={[s.input, email.length > 0 && s.inputFilled]}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="email@example.com"
@@ -353,36 +554,37 @@ export default function CreateBooking() {
         </View>
 
         {/* ── BILLING ADDRESS ── */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="card" size={18} color={primary} />
-            <Text style={styles.sectionTitle}>Billing Address</Text>
-          </View>
+        <View style={s.card}>
+          {renderSectionHeader('card', 'Billing Address')}
 
-          <Text style={styles.label}>Street Address</Text>
-          <TextInput
-            style={styles.input}
+          <Text style={s.label}>Street Address</Text>
+          <AddressAutocomplete
             value={billingAddress}
             onChangeText={setBillingAddress}
-            placeholder="123 Main St"
-            placeholderTextColor={textMuted}
+            onAddressSelect={({ street, city, state: st, zip }) => {
+              setBillingAddress(street);
+              setBillingCity(city);
+              setBillingState(st);
+              setBillingZip(zip);
+            }}
+            placeholder="Start typing an address..."
           />
 
-          <View style={styles.threeCol}>
-            <View style={styles.colFlex2}>
-              <Text style={styles.label}>City</Text>
+          <View style={s.row3}>
+            <View style={s.colFlex2}>
+              <Text style={s.label}>City</Text>
               <TextInput
-                style={styles.input}
+                style={[s.input, billingCity.length > 0 && s.inputFilled]}
                 value={billingCity}
                 onChangeText={setBillingCity}
                 placeholder="Oakland"
                 placeholderTextColor={textMuted}
               />
             </View>
-            <View style={styles.colSmall}>
-              <Text style={styles.label}>State</Text>
+            <View style={s.colSmall}>
+              <Text style={s.label}>State</Text>
               <TextInput
-                style={styles.input}
+                style={[s.input, billingState.length > 0 && s.inputFilled]}
                 value={billingState}
                 onChangeText={setBillingState}
                 placeholder="CA"
@@ -391,10 +593,10 @@ export default function CreateBooking() {
                 autoCapitalize="characters"
               />
             </View>
-            <View style={styles.colSmall}>
-              <Text style={styles.label}>ZIP</Text>
+            <View style={s.colSmall}>
+              <Text style={s.label}>ZIP</Text>
               <TextInput
-                style={styles.input}
+                style={[s.input, billingZip.length > 0 && s.inputFilled]}
                 value={billingZip}
                 onChangeText={setBillingZip}
                 placeholder="94601"
@@ -407,53 +609,54 @@ export default function CreateBooking() {
         </View>
 
         {/* ── DELIVERY ADDRESS ── */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="navigate" size={18} color={primary} />
-            <Text style={styles.sectionTitle}>Delivery Address</Text>
-          </View>
+        <View style={s.card}>
+          {renderSectionHeader('navigate', 'Delivery Address')}
 
-          {/* Same as billing checkbox */}
           <TouchableOpacity
-            style={styles.checkboxRow}
+            style={s.checkboxRow}
             onPress={() => setSameAsBilling(!sameAsBilling)}
+            activeOpacity={0.7}
           >
-            <Ionicons
-              name={sameAsBilling ? 'checkbox' : 'square-outline'}
-              size={22}
-              color={sameAsBilling ? primary : textMuted}
-            />
-            <Text style={[styles.checkboxLabel, sameAsBilling && { color: primary }]}>
+            <View style={[s.checkbox, sameAsBilling && s.checkboxChecked]}>
+              {sameAsBilling && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            </View>
+            <Text style={[s.checkboxLabel, sameAsBilling && { color: primaryLight }]}>
               Same as billing address
             </Text>
           </TouchableOpacity>
 
           {!sameAsBilling && (
             <>
-              <Text style={styles.label}>Street Address <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
+              <Text style={s.label}>
+                Street Address <Text style={s.required}>*</Text>
+              </Text>
+              <AddressAutocomplete
                 value={deliveryAddress}
                 onChangeText={setDeliveryAddress}
-                placeholder="456 Oak Ave"
-                placeholderTextColor={textMuted}
+                onAddressSelect={({ street, city, state: st, zip }) => {
+                  setDeliveryAddress(street);
+                  setDeliveryCity(city);
+                  setDeliveryState(st);
+                  setDeliveryZip(zip);
+                }}
+                placeholder="Start typing an address..."
               />
 
-              <View style={styles.threeCol}>
-                <View style={styles.colFlex2}>
-                  <Text style={styles.label}>City</Text>
+              <View style={s.row3}>
+                <View style={s.colFlex2}>
+                  <Text style={s.label}>City</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[s.input, deliveryCity.length > 0 && s.inputFilled]}
                     value={deliveryCity}
                     onChangeText={setDeliveryCity}
                     placeholder="Berkeley"
                     placeholderTextColor={textMuted}
                   />
                 </View>
-                <View style={styles.colSmall}>
-                  <Text style={styles.label}>State</Text>
+                <View style={s.colSmall}>
+                  <Text style={s.label}>State</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[s.input, deliveryState.length > 0 && s.inputFilled]}
                     value={deliveryState}
                     onChangeText={setDeliveryState}
                     placeholder="CA"
@@ -462,10 +665,10 @@ export default function CreateBooking() {
                     autoCapitalize="characters"
                   />
                 </View>
-                <View style={styles.colSmall}>
-                  <Text style={styles.label}>ZIP</Text>
+                <View style={s.colSmall}>
+                  <Text style={s.label}>ZIP</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[s.input, deliveryZip.length > 0 && s.inputFilled]}
                     value={deliveryZip}
                     onChangeText={setDeliveryZip}
                     placeholder="94702"
@@ -477,47 +680,46 @@ export default function CreateBooking() {
               </View>
             </>
           )}
+
           {sameAsBilling && billingAddress ? (
-            <View style={styles.sameAsPreview}>
+            <View style={s.sameAsPreview}>
               <Ionicons name="checkmark-circle" size={16} color={success} />
-              <Text style={styles.sameAsText}>{[billingAddress, billingCity, billingState, billingZip].filter(Boolean).join(', ')}</Text>
+              <Text style={s.sameAsText}>{fullBillingAddress}</Text>
             </View>
           ) : null}
         </View>
 
-        {/* ── DELIVERY DATE & WINDOW ── */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="calendar" size={18} color={primary} />
-            <Text style={styles.sectionTitle}>Schedule</Text>
-          </View>
+        {/* ── SCHEDULE ── */}
+        <View style={s.card}>
+          {renderSectionHeader('calendar', 'Schedule')}
 
-          <Text style={styles.label}>
-            Delivery Date <Text style={styles.required}>*</Text>
+          <Text style={s.label}>
+            Delivery Date <Text style={s.required}>*</Text>
           </Text>
           <TouchableOpacity
-            style={styles.datePickerBtn}
+            style={[s.dateBtn, deliveryDate && s.dateBtnFilled]}
             onPress={() => setShowCalendar(true)}
+            activeOpacity={0.7}
           >
             <Ionicons name="calendar-outline" size={20} color={deliveryDate ? primary : textMuted} />
-            <Text style={[styles.datePickerText, deliveryDate && { color: textColor }]}>
+            <Text style={[s.dateBtnText, deliveryDate && { color: textColor, fontWeight: '600' }]}>
               {deliveryDate || 'Select a date...'}
             </Text>
-            <Ionicons name="chevron-down" size={18} color={textMuted} />
+            <Ionicons name="chevron-down" size={16} color={textMuted} />
           </TouchableOpacity>
 
           {/* Calendar Modal */}
           <Modal visible={showCalendar} transparent animationType="fade">
             <TouchableOpacity
-              style={styles.modalOverlay}
+              style={s.modalOverlay}
               activeOpacity={1}
               onPress={() => setShowCalendar(false)}
             >
-              <View style={styles.calendarModal}>
-                <View style={styles.calendarHeader}>
-                  <Text style={styles.calendarTitle}>Select Delivery Date</Text>
-                  <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                    <Ionicons name="close" size={24} color={textColor} />
+              <View style={s.calendarModal}>
+                <View style={s.calendarHeader}>
+                  <Text style={s.calendarTitle}>Select Delivery Date</Text>
+                  <TouchableOpacity onPress={() => setShowCalendar(false)} style={s.calendarClose}>
+                    <Ionicons name="close" size={22} color={textColor} />
                   </TouchableOpacity>
                 </View>
                 <Calendar
@@ -536,9 +738,9 @@ export default function CreateBooking() {
             </TouchableOpacity>
           </Modal>
 
-          <Text style={styles.label}>Delivery Window</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-            <View style={styles.pillRow}>
+          <Text style={s.label}>Delivery Window</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+            <View style={s.pillRow}>
               {DELIVERY_WINDOWS.map((w) =>
                 renderPill(w.label, deliveryWindow === w.id, () => setDeliveryWindow(w.id))
               )}
@@ -547,67 +749,63 @@ export default function CreateBooking() {
         </View>
 
         {/* ── SERVICE DETAILS ── */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="cube" size={18} color={primary} />
-            <Text style={styles.sectionTitle}>Service Details</Text>
-          </View>
+        <View style={s.card}>
+          {renderSectionHeader('cube', 'Service Details')}
 
-          <Text style={styles.label}>
-            Dumpster Size <Text style={styles.required}>*</Text>
+          <Text style={s.label}>
+            Dumpster Size <Text style={s.required}>*</Text>
           </Text>
-          <View style={styles.pillRow}>
-            {DUMPSTER_SIZES.map((s) => {
-              const count = (state.dumpsters || []).filter(d => d.size === s.id).length;
-              const availCount = (state.dumpsters || []).filter(d => d.size === s.id && d.status === 'available').length;
+          <View style={s.pillRow}>
+            {DUMPSTER_SIZES.map((sz) => {
+              const count = (state.dumpsters || []).filter(d => d.size === sz.id).length;
+              const availCount = (state.dumpsters || []).filter(d => d.size === sz.id && d.status === 'available').length;
               if (count === 0) return null;
               return renderPill(
-                `${s.label} — $${s.basePrice} (${availCount} avail)`,
-                dumpsterSize === s.id,
+                `${sz.label} \u2014 $${sz.basePrice} (${availCount} avail)`,
+                dumpsterSize === sz.id,
                 () => {
-                  setDumpsterSize(s.id);
+                  setDumpsterSize(sz.id);
                   setDumpsterId('');
-                  setBasePrice(String(s.basePrice));
+                  setBasePrice(String(sz.basePrice));
                 }
               );
             })}
           </View>
 
-          <Text style={styles.label}>
-            Service Type <Text style={styles.required}>*</Text>
+          <Text style={s.label}>
+            Service Type <Text style={s.required}>*</Text>
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-            <View style={styles.pillRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+            <View style={s.pillRow}>
               {SERVICE_TYPES.map((t) =>
                 renderPill(t, serviceType === t, () => setServiceType(t))
               )}
             </View>
           </ScrollView>
 
-          <Text style={styles.label}>Type of Material</Text>
+          <Text style={s.label}>Type of Material</Text>
           <TextInput
-            style={styles.input}
+            style={[s.input, material.length > 0 && s.inputFilled]}
             value={material}
             onChangeText={setMaterial}
-            placeholder="Optional — specify if different from service type"
+            placeholder="Specify if different from service type"
             placeholderTextColor={textMuted}
           />
         </View>
 
         {/* ── PRICING ── */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="cash" size={18} color={primary} />
-            <Text style={styles.sectionTitle}>Pricing</Text>
-          </View>
+        <View style={s.card}>
+          {renderSectionHeader('cash', 'Pricing')}
 
-          <View style={styles.twoCol}>
-            <View style={styles.col}>
-              <Text style={styles.label}>Base Price <Text style={styles.required}>*</Text></Text>
-              <View style={styles.priceInputRow}>
-                <Text style={styles.dollarSign}>$</Text>
+          <View style={s.row}>
+            <View style={s.col}>
+              <Text style={s.label}>
+                Base Price <Text style={s.required}>*</Text>
+              </Text>
+              <View style={s.priceRow}>
+                <Text style={s.dollar}>$</Text>
                 <TextInput
-                  style={[styles.input, styles.priceInput]}
+                  style={[s.input, s.priceInput, basePrice.length > 0 && s.inputFilled]}
                   value={basePrice}
                   onChangeText={setBasePrice}
                   placeholder="0.00"
@@ -616,12 +814,12 @@ export default function CreateBooking() {
                 />
               </View>
             </View>
-            <View style={styles.col}>
-              <Text style={styles.label}>Discount ($)</Text>
-              <View style={styles.priceInputRow}>
-                <Text style={styles.dollarSign}>$</Text>
+            <View style={s.col}>
+              <Text style={s.label}>Discount ($)</Text>
+              <View style={s.priceRow}>
+                <Text style={s.dollar}>$</Text>
                 <TextInput
-                  style={[styles.input, styles.priceInput]}
+                  style={[s.input, s.priceInput, discount.length > 0 && s.inputFilled]}
                   value={discount}
                   onChangeText={setDiscount}
                   placeholder="0.00"
@@ -632,37 +830,52 @@ export default function CreateBooking() {
             </View>
           </View>
 
-          <Text style={styles.label}>Special Items</Text>
-          <View style={styles.specialItemsGrid}>
+          <Text style={s.label}>Special Items</Text>
+          <View style={s.specialGrid}>
             {SPECIAL_ITEM_FEES.map((item) => {
               const isSelected = !!selectedSpecialItems[item.id];
               return (
-                <View key={item.id} style={styles.specialItemRow}>
+                <View key={item.id} style={s.specialRow}>
                   <TouchableOpacity
                     style={[
-                      styles.specialItemPill,
-                      isSelected && { backgroundColor: primary + '22', borderColor: primary },
+                      s.specialPill,
+                      isSelected && {
+                        backgroundColor: primary + '18',
+                        borderColor: primary,
+                      },
                     ]}
                     onPress={() => toggleSpecialItem(item)}
+                    activeOpacity={0.7}
                   >
-                    <Ionicons
-                      name={isSelected ? 'checkbox' : 'square-outline'}
-                      size={18}
-                      color={isSelected ? primary : textMuted}
-                    />
-                    <Text style={[styles.specialItemLabel, isSelected && { color: primary }]}>
+                    <View style={[s.specialCheck, isSelected && s.specialCheckActive]}>
+                      {isSelected && <Ionicons name="checkmark" size={12} color="#FFFFFF" />}
+                    </View>
+                    <Text style={[s.specialLabel, isSelected && { color: primary, fontWeight: '600' }]}>
                       {item.label} (${item.fee})
                     </Text>
                   </TouchableOpacity>
                   {isSelected && (
-                    <View style={styles.qtyRow}>
-                      <Text style={styles.qtyLabel}>Qty:</Text>
+                    <View style={s.qtyRow}>
+                      <TouchableOpacity
+                        style={s.qtyBtn}
+                        onPress={() => updateSpecialItemQty(item.id, (selectedSpecialItems[item.id]?.qty || 1) - 1)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="remove" size={14} color={textSecondary} />
+                      </TouchableOpacity>
                       <TextInput
-                        style={styles.qtyInput}
+                        style={s.qtyInput}
                         value={String(selectedSpecialItems[item.id]?.qty || 1)}
                         onChangeText={(val) => updateSpecialItemQty(item.id, val)}
                         keyboardType="numeric"
                       />
+                      <TouchableOpacity
+                        style={s.qtyBtn}
+                        onPress={() => updateSpecialItemQty(item.id, (selectedSpecialItems[item.id]?.qty || 1) + 1)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="add" size={14} color={textSecondary} />
+                      </TouchableOpacity>
                     </View>
                   )}
                 </View>
@@ -671,25 +884,26 @@ export default function CreateBooking() {
           </View>
 
           {/* Total */}
-          <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>Estimated Total</Text>
-            <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+          <View style={s.totalCard}>
+            <View>
+              <Text style={s.totalLabel}>Estimated Total</Text>
+              {parseFloat(discount) > 0 && (
+                <Text style={s.totalDiscount}>-${parseFloat(discount).toFixed(2)} discount</Text>
+              )}
+            </View>
+            <Text style={s.totalValue}>${total.toFixed(2)}</Text>
           </View>
         </View>
 
         {/* ── ASSIGNMENT ── */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="git-branch" size={18} color={primary} />
-            <Text style={styles.sectionTitle}>Assignment</Text>
-          </View>
+        <View style={s.card}>
+          {renderSectionHeader('git-branch', 'Assignment')}
 
-          {/* Assign Dumpster — Smart Inventory */}
           {dumpsterSize ? (
             <>
-              <Text style={styles.label}>Assign Dumpster</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-                <View style={styles.pillRow}>
+              <Text style={s.label}>Assign Dumpster</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                <View style={s.pillRow}>
                   {renderPill('Auto (none)', !dumpsterId, () => setDumpsterId(''))}
                   {availableNow.map((d) =>
                     renderPill(d.id, dumpsterId === d.id, () => setDumpsterId(d.id), success)
@@ -697,27 +911,31 @@ export default function CreateBooking() {
                 </View>
               </ScrollView>
               {availableSoon.length > 0 && (
-                <View style={styles.smartInventory}>
-                  <View style={styles.smartHeader}>
-                    <Ionicons name="bulb-outline" size={16} color={primaryLight} />
-                    <Text style={styles.smartTitle}>Available by delivery date</Text>
+                <View style={s.smartBox}>
+                  <View style={s.smartHeader}>
+                    <Ionicons name="bulb-outline" size={15} color={primaryLight} />
+                    <Text style={s.smartTitle}>Available by delivery date</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.pillRow}>
+                    <View style={s.pillRow}>
                       {availableSoon.map((d) => (
                         <TouchableOpacity
                           key={d.id}
                           style={[
-                            styles.pill,
-                            styles.smartPill,
-                            dumpsterId === d.id && { backgroundColor: primaryLight + '22', borderColor: primaryLight },
+                            s.pill,
+                            { borderStyle: 'dashed' },
+                            dumpsterId === d.id && {
+                              backgroundColor: primaryLight + '18',
+                              borderColor: primaryLight,
+                            },
                           ]}
                           onPress={() => setDumpsterId(d.id)}
+                          activeOpacity={0.7}
                         >
-                          <Text style={[styles.pillText, dumpsterId === d.id && { color: primaryLight, fontWeight: '600' }]}>
+                          <Text style={[s.pillText, dumpsterId === d.id && { color: primaryLight, fontWeight: '700' }]}>
                             {d.id}
                           </Text>
-                          <Text style={styles.smartSubtext}>Free by {d._releasesBy}</Text>
+                          <Text style={s.smartSubtext}>Free by {d._releasesBy}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -725,16 +943,16 @@ export default function CreateBooking() {
                 </View>
               )}
               {availableNow.length === 0 && availableSoon.length === 0 && (
-                <Text style={styles.noneText}>No dumpsters available for this size and date</Text>
+                <Text style={s.emptyText}>No dumpsters available for this size and date</Text>
               )}
             </>
           ) : (
-            <Text style={styles.noneText}>Select a dumpster size first</Text>
+            <Text style={s.emptyText}>Select a dumpster size first</Text>
           )}
 
-          <Text style={[styles.label, { marginTop: 16 }]}>Assign Driver</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-            <View style={styles.pillRow}>
+          <Text style={[s.label, { marginTop: 20 }]}>Assign Driver</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+            <View style={s.pillRow}>
               {renderPill('None', !driverId, () => setDriverId(''))}
               {(state.drivers || []).map((d) =>
                 renderPill(d.name, driverId === d.id, () => setDriverId(d.id), primaryLight)
@@ -744,10 +962,12 @@ export default function CreateBooking() {
         </View>
 
         {/* ── NOTES & SOURCE ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.label}>Notes</Text>
+        <View style={s.card}>
+          {renderSectionHeader('document-text', 'Notes & Source')}
+
+          <Text style={s.label}>Notes</Text>
           <TextInput
-            style={[styles.input, styles.multiline]}
+            style={[s.input, s.multiline, notes.length > 0 && s.inputFilled]}
             value={notes}
             onChangeText={setNotes}
             placeholder="Gate code, special instructions..."
@@ -757,19 +977,18 @@ export default function CreateBooking() {
             textAlignVertical="top"
           />
 
-          <Text style={styles.label}>Source</Text>
-          <View style={styles.pillRow}>
-            {SOURCE_OPTIONS.map((s) =>
+          <Text style={s.label}>Source</Text>
+          <View style={s.pillRow}>
+            {SOURCE_OPTIONS.map((opt) =>
               renderPill(
-                s.charAt(0).toUpperCase() + s.slice(1),
-                source === s,
+                opt.charAt(0).toUpperCase() + opt.slice(1),
+                source === opt,
                 () => {
-                  setSource(s);
-                  // Auto-apply 5% web discount
-                  if (s === 'website' && basePrice) {
+                  setSource(opt);
+                  if (opt === 'website' && basePrice) {
                     const disc = (parseFloat(basePrice) * 0.05).toFixed(2);
                     setDiscount(disc);
-                  } else if (s !== 'website' && discount && basePrice) {
+                  } else if (opt !== 'website' && discount && basePrice) {
                     const webDisc = (parseFloat(basePrice) * 0.05).toFixed(2);
                     if (discount === webDisc) setDiscount('');
                   }
@@ -778,165 +997,520 @@ export default function CreateBooking() {
             )}
           </View>
           {source === 'website' && (
-            <Text style={{ fontSize: 11, color: success, marginTop: 4 }}>
-              5% web discount auto-applied
-            </Text>
+            <View style={s.discountBadge}>
+              <Ionicons name="pricetag" size={12} color={success} />
+              <Text style={s.discountBadgeText}>5% web discount auto-applied</Text>
+            </View>
           )}
         </View>
 
-        {/* Submit */}
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-          <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
-          <Text style={styles.submitBtnText}>Create Booking</Text>
+        {/* ── Submit ── */}
+        <TouchableOpacity style={s.submitBtn} onPress={handleSubmit} activeOpacity={0.85}>
+          <Ionicons name="add-circle" size={22} color="#FFFFFF" />
+          <Text style={s.submitBtnText}>Create Booking</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 48 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+// ── Styles ──
+const s = StyleSheet.create({
+  // Layout
   container: { flex: 1, backgroundColor: bg },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 20, paddingTop: 12 },
+
+  // Header
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: border,
+    backgroundColor: bg,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: bgElevated, alignItems: 'center', justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: bgCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0.5,
+    borderColor: border,
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: textColor },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16 },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: textColor,
+    letterSpacing: -0.3,
+  },
 
-  // Section Cards
-  sectionCard: {
-    backgroundColor: bgCard, borderRadius: 14, padding: 16,
-    marginBottom: 16, borderWidth: 1, borderColor: border,
+  // Cards
+  card: {
+    backgroundColor: bgCard,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 0.5,
+    borderColor: border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
+
+  // Section headers
   sectionHeaderRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+    paddingBottom: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: border + '80',
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: textColor },
+  sectionIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: textColor,
+    letterSpacing: -0.2,
+  },
+  sectionDivider: {
+    flex: 1,
+    height: 0.5,
+    backgroundColor: border + '50',
+    marginLeft: 8,
+  },
 
-  label: { fontSize: 13, fontWeight: '600', color: textSecondary, marginTop: 12, marginBottom: 6 },
+  // Labels
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: textSecondary,
+    marginTop: 16,
+    marginBottom: 8,
+    letterSpacing: 0.1,
+    textTransform: 'uppercase',
+  },
   required: { color: danger },
-  input: {
-    backgroundColor: bgInput, borderRadius: 10, borderWidth: 1, borderColor: border,
-    paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: textColor,
-  },
-  multiline: { minHeight: 80, paddingTop: 12 },
 
-  // Layout
-  twoCol: { flexDirection: 'row', gap: 12 },
+  // Inputs
+  input: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: textColor,
+    fontWeight: '400',
+  },
+  inputFocused: {
+    borderColor: primary,
+    backgroundColor: '#1E1E1E',
+  },
+  inputFilled: {
+    borderColor: '#444444',
+    backgroundColor: '#1E1E1E',
+  },
+  multiline: {
+    minHeight: 88,
+    paddingTop: 14,
+  },
+
+  // Rows
+  row: { flexDirection: 'row', gap: 12 },
   col: { flex: 1 },
-  threeCol: { flexDirection: 'row', gap: 10 },
+  row3: { flexDirection: 'row', gap: 10 },
   colFlex2: { flex: 2 },
   colSmall: { flex: 1 },
 
-  // Autocomplete
-  autocompleteWrap: { position: 'relative', zIndex: 10 },
-  dropdown: {
-    backgroundColor: bgElevated, borderRadius: 10, borderWidth: 1, borderColor: border,
-    marginTop: 4, overflow: 'hidden',
+  // Address Autocomplete
+  acWrap: { position: 'relative', zIndex: 10 },
+  acDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: bgElevated,
+    borderRadius: 12,
+    borderWidth: 0.5,
+    borderColor: border,
+    marginTop: 6,
+    overflow: 'hidden',
+    zIndex: 100,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  dropdownItem: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: border },
-  dropdownName: { fontSize: 14, fontWeight: '600', color: textColor },
-  dropdownSub: { fontSize: 12, color: textMuted, marginTop: 2 },
-  dropdownHint: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 8, marginTop: 4,
+  acItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: border + '60',
   },
-  dropdownHintText: { fontSize: 12, color: textMuted, fontStyle: 'italic' },
+  acMainText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: textColor,
+  },
+  acSecText: {
+    fontSize: 12,
+    color: textMuted,
+    marginTop: 2,
+  },
+  acPowered: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    alignItems: 'flex-end',
+  },
+  acPoweredText: {
+    fontSize: 10,
+    color: textMuted,
+  },
+  acHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingTop: 8,
+  },
+  acHintText: {
+    fontSize: 12,
+    color: textMuted,
+    fontStyle: 'italic',
+  },
 
   // Checkbox
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  checkboxLabel: { fontSize: 14, color: textSecondary },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: textMuted,
+    backgroundColor: '#1E1E1E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: primary,
+    borderColor: primary,
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: textSecondary,
+    fontWeight: '500',
+  },
 
   // Same as preview
   sameAsPreview: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: success + '15', borderRadius: 8, padding: 10, marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: success + '12',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 0.5,
+    borderColor: success + '30',
   },
-  sameAsText: { fontSize: 13, color: textSecondary, flex: 1 },
+  sameAsText: {
+    fontSize: 13,
+    color: textSecondary,
+    flex: 1,
+    fontWeight: '500',
+  },
 
   // Date picker
-  datePickerBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: bgInput, borderRadius: 10, borderWidth: 1, borderColor: border,
-    paddingHorizontal: 14, paddingVertical: 12, gap: 10,
+  dateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
   },
-  datePickerText: { flex: 1, fontSize: 15, color: textMuted },
+  dateBtnFilled: {
+    borderColor: '#444444',
+  },
+  dateBtnText: {
+    flex: 1,
+    fontSize: 15,
+    color: textMuted,
+    fontWeight: '400',
+  },
 
   // Calendar modal
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center', alignItems: 'center', padding: 20,
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
   },
   calendarModal: {
-    backgroundColor: bgCard, borderRadius: 16, overflow: 'hidden', width: '100%', maxWidth: 400,
+    backgroundColor: bgCard,
+    borderRadius: 20,
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 0.5,
+    borderColor: border,
   },
   calendarHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 18,
+    borderBottomWidth: 0.5,
+    borderBottomColor: border,
   },
-  calendarTitle: { fontSize: 16, fontWeight: '700', color: textColor },
+  calendarTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: textColor,
+  },
+  calendarClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: bgElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Pills
-  pillScroll: { marginBottom: 4 },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pill: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 1.5, borderColor: border, backgroundColor: bgElevated,
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  pillText: { fontSize: 13, color: textSecondary },
+  pill: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: border,
+    backgroundColor: bgElevated,
+  },
+  pillText: {
+    fontSize: 13,
+    color: textSecondary,
+    fontWeight: '500',
+  },
 
   // Pricing
-  priceInputRow: { flexDirection: 'row', alignItems: 'center' },
-  dollarSign: { fontSize: 18, color: textSecondary, marginRight: 8, fontWeight: '600' },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dollar: {
+    fontSize: 18,
+    color: textSecondary,
+    marginRight: 8,
+    fontWeight: '700',
+  },
   priceInput: { flex: 1 },
 
   // Special items
-  specialItemsGrid: { gap: 8 },
-  specialItemRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  specialItemPill: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-    borderWidth: 1.5, borderColor: border, backgroundColor: bgElevated, gap: 8,
+  specialGrid: { gap: 10 },
+  specialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  specialItemLabel: { fontSize: 13, color: textSecondary },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  qtyLabel: { fontSize: 13, color: textMuted },
+  specialPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: border,
+    backgroundColor: bgElevated,
+    gap: 10,
+  },
+  specialCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: textMuted,
+    backgroundColor: '#1E1E1E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  specialCheckActive: {
+    backgroundColor: primary,
+    borderColor: primary,
+  },
+  specialLabel: {
+    fontSize: 13,
+    color: textSecondary,
+    fontWeight: '500',
+  },
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  qtyBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: bgElevated,
+    borderWidth: 1,
+    borderColor: border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   qtyInput: {
-    backgroundColor: bgInput, borderRadius: 8, borderWidth: 1, borderColor: border,
-    paddingHorizontal: 10, paddingVertical: 6, width: 50, fontSize: 14, color: textColor, textAlign: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: border,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    width: 44,
+    fontSize: 14,
+    color: textColor,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 
   // Smart inventory
-  noneText: { fontSize: 13, color: textMuted, fontStyle: 'italic', marginTop: 8 },
-  smartInventory: {
-    marginTop: 10, backgroundColor: primaryLight + '0D', borderRadius: 10,
-    padding: 10, borderWidth: 1, borderColor: primaryLight + '30',
+  emptyText: {
+    fontSize: 13,
+    color: textMuted,
+    fontStyle: 'italic',
+    marginTop: 8,
   },
-  smartHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  smartTitle: { fontSize: 12, fontWeight: '600', color: primaryLight },
-  smartPill: { borderStyle: 'dashed' },
-  smartSubtext: { fontSize: 10, color: textMuted, marginTop: 2 },
+  smartBox: {
+    marginTop: 12,
+    backgroundColor: primaryLight + '0A',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 0.5,
+    borderColor: primaryLight + '25',
+  },
+  smartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  smartTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: primaryLight,
+    letterSpacing: 0.2,
+  },
+  smartSubtext: {
+    fontSize: 10,
+    color: textMuted,
+    marginTop: 3,
+  },
 
   // Total
   totalCard: {
-    backgroundColor: bg, borderRadius: 12, padding: 16, marginTop: 16,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: bg,
+    borderRadius: 14,
+    padding: 20,
+    marginTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: border,
   },
-  totalLabel: { fontSize: 16, fontWeight: '700', color: textColor },
-  totalValue: { fontSize: 24, fontWeight: '800', color: primary },
+  totalLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: textSecondary,
+    letterSpacing: -0.2,
+  },
+  totalDiscount: {
+    fontSize: 11,
+    color: success,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  totalValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: primary,
+    letterSpacing: -0.5,
+  },
+
+  // Discount badge
+  discountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: success + '12',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  discountBadgeText: {
+    fontSize: 12,
+    color: success,
+    fontWeight: '600',
+  },
 
   // Submit
   submitBtn: {
-    backgroundColor: primary, borderRadius: 12, paddingVertical: 16,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8,
+    backgroundColor: primary,
+    borderRadius: 16,
+    paddingVertical: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 8,
+    shadowColor: primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  submitBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  submitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
 });
