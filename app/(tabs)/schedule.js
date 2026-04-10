@@ -109,9 +109,10 @@ export default function ScheduleScreen() {
   const filledSlots = Object.values(bookingsByDay).reduce((sum, arr) => sum + arr.length, 0);
   const utilization = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
 
-  const COL_WIDTH = 110;
-  const GUTTER_WIDTH = 60;
-  const ROW_HEIGHT = 100;
+  const screenWidth = Dimensions.get('window').width;
+  const GUTTER_WIDTH = 44;
+  const COL_WIDTH = Math.floor((screenWidth - 32 - GUTTER_WIDTH) / 7);
+  const ROW_HEIGHT = 90;
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -152,7 +153,6 @@ export default function ScheduleScreen() {
 
         {/* Calendar Grid */}
         <View style={{ backgroundColor: COLORS.surface_container_low, borderRadius: 16, overflow: 'hidden' }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
               {/* Day Headers */}
               <View style={{ flexDirection: 'row', backgroundColor: COLORS.surface_container_high }}>
@@ -173,16 +173,16 @@ export default function ScheduleScreen() {
                     >
                       <Text style={{
                         fontWeight: '600',
-                        letterSpacing: 2,
+                        letterSpacing: 1,
                         textTransform: 'uppercase',
-                        fontSize: 10,
+                        fontSize: 9,
                         color: isToday ? COLORS.primary : COLORS.secondary_container,
                         marginBottom: 2,
                       }}>
                         {DAY_NAMES[idx]}
                       </Text>
                       <Text style={{
-                        fontSize: 22,
+                        fontSize: 16,
                         fontWeight: '800',
                         color: isToday ? COLORS.primary : COLORS.on_surface,
                         letterSpacing: -0.5,
@@ -260,7 +260,6 @@ export default function ScheduleScreen() {
                 </View>
               ))}
             </View>
-          </ScrollView>
         </View>
 
         {/* Summary Cards */}
