@@ -203,7 +203,6 @@ export default function CreateBooking() {
     if (!deliveryDate) return Alert.alert('Required', 'Delivery date is required.');
     if (!dumpsterSize) return Alert.alert('Required', 'Dumpster size is required.');
     if (!serviceType) return Alert.alert('Required', 'Service type is required.');
-    if (!material.trim()) return Alert.alert('Required', 'Type of material is required.');
     if (!basePrice || parseFloat(basePrice) <= 0)
       return Alert.alert('Required', 'Base price must be greater than 0.');
 
@@ -544,17 +543,20 @@ export default function CreateBooking() {
             Dumpster Size <Text style={styles.required}>*</Text>
           </Text>
           <View style={styles.pillRow}>
-            {DUMPSTER_SIZES.map((s) =>
-              renderPill(
-                `${s.label} — $${s.basePrice}`,
+            {DUMPSTER_SIZES.map((s) => {
+              const count = (state.dumpsters || []).filter(d => d.size === s.id).length;
+              const availCount = (state.dumpsters || []).filter(d => d.size === s.id && d.status === 'available').length;
+              if (count === 0) return null;
+              return renderPill(
+                `${s.label} — $${s.basePrice} (${availCount} avail)`,
                 dumpsterSize === s.id,
                 () => {
                   setDumpsterSize(s.id);
                   setDumpsterId('');
                   setBasePrice(String(s.basePrice));
                 }
-              )
-            )}
+              );
+            })}
           </View>
 
           <Text style={styles.label}>
@@ -568,14 +570,12 @@ export default function CreateBooking() {
             </View>
           </ScrollView>
 
-          <Text style={styles.label}>
-            Type of Material <Text style={styles.required}>*</Text>
-          </Text>
+          <Text style={styles.label}>Type of Material</Text>
           <TextInput
             style={styles.input}
             value={material}
             onChangeText={setMaterial}
-            placeholder="e.g. Concrete, mixed debris"
+            placeholder="Optional — specify if different from service type"
             placeholderTextColor={textMuted}
           />
         </View>

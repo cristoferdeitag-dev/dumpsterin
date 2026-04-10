@@ -43,12 +43,9 @@ export const DELIVERY_WINDOWS = [
 
 export const SERVICE_TYPES = [
   'General Debris',
+  'Clean Concrete',
   'Clean Soil',
-  'Concrete/Asphalt',
-  'Roofing Materials',
-  'Yard Waste',
-  'Mixed Construction',
-  'Household Junk',
+  'Mix',
 ];
 
 // Fleet: 15 dumpsters — 5x10yd, 5x20yd, 5x30yd
