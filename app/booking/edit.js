@@ -316,10 +316,17 @@ export default function EditBooking() {
         </Text>
         <View style={styles.pillRow}>
           {DUMPSTER_SIZES.map((s) =>
-            renderPill(s.label, dumpsterSize === s.id, () => {
-              setDumpsterSize(s.id);
-              if (s.id !== dumpsterSize) setDumpsterId('');
-            })
+            renderPill(
+              `${s.label} — $${s.basePrice}`,
+              dumpsterSize === s.id,
+              () => {
+                setDumpsterSize(s.id);
+                if (s.id !== dumpsterSize) {
+                  setDumpsterId('');
+                  setBasePrice(String(s.basePrice));
+                }
+              }
+            )
           )}
         </View>
 

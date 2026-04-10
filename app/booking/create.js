@@ -545,10 +545,15 @@ export default function CreateBooking() {
           </Text>
           <View style={styles.pillRow}>
             {DUMPSTER_SIZES.map((s) =>
-              renderPill(s.label, dumpsterSize === s.id, () => {
-                setDumpsterSize(s.id);
-                setDumpsterId('');
-              })
+              renderPill(
+                `${s.label} — $${s.basePrice}`,
+                dumpsterSize === s.id,
+                () => {
+                  setDumpsterSize(s.id);
+                  setDumpsterId('');
+                  setBasePrice(String(s.basePrice));
+                }
+              )
             )}
           </View>
 
@@ -744,10 +749,25 @@ export default function CreateBooking() {
               renderPill(
                 s.charAt(0).toUpperCase() + s.slice(1),
                 source === s,
-                () => setSource(s)
+                () => {
+                  setSource(s);
+                  // Auto-apply 5% web discount
+                  if (s === 'website' && basePrice) {
+                    const disc = (parseFloat(basePrice) * 0.05).toFixed(2);
+                    setDiscount(disc);
+                  } else if (s !== 'website' && discount && basePrice) {
+                    const webDisc = (parseFloat(basePrice) * 0.05).toFixed(2);
+                    if (discount === webDisc) setDiscount('');
+                  }
+                }
               )
             )}
           </View>
+          {source === 'website' && (
+            <Text style={{ fontSize: 11, color: success, marginTop: 4 }}>
+              5% web discount auto-applied
+            </Text>
+          )}
         </View>
 
         {/* Submit */}

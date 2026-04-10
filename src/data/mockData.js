@@ -20,9 +20,9 @@ export const COMPANY = {
 };
 
 export const DUMPSTER_SIZES = [
-  { id: '10yd', label: '10 Yard', capacity: '10 cubic yards', rentalDays: 3, note: 'Heavy debris' },
-  { id: '20yd', label: '20 Yard', capacity: '20 cubic yards', rentalDays: 7, note: 'General debris' },
-  { id: '30yd', label: '30 Yard', capacity: '30 cubic yards', rentalDays: 7, note: 'General debris' },
+  { id: '10yd', label: '10 Yard', capacity: '10 cubic yards', rentalDays: 3, note: 'Heavy debris', basePrice: 649 },
+  { id: '20yd', label: '20 Yard', capacity: '20 cubic yards', rentalDays: 7, note: 'General debris', basePrice: 699 },
+  { id: '30yd', label: '30 Yard', capacity: '30 cubic yards', rentalDays: 7, note: 'General debris', basePrice: 799 },
 ];
 
 export const SPECIAL_ITEM_FEES = [
