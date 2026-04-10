@@ -41,33 +41,12 @@ export const DELIVERY_WINDOWS = [
   { id: 'sameday', label: 'Same-Day (ASAP)' },
 ];
 
-// Service types with available dumpster sizes per service (from tpdumpsters.com)
+// 4 simplified service types
 export const SERVICE_TYPES = [
   {
     id: 'general_debris', label: 'General Debris', icon: '🏗️',
-    description: 'Home remodels, furniture, junk, light demolition',
+    description: 'Remodels, construction, roofing, cleanouts, junk, yard waste',
     note: 'Mattresses/appliances/tires: $20–$60 each',
-    sizes: ['10yd', '20yd', '30yd'],
-  },
-  {
-    id: 'household', label: 'Household Clean Out', icon: '🏠',
-    description: 'House & garage cleanouts, furniture removal, decluttering',
-    note: 'Mattresses/appliances/tires: $20–$60 each',
-    sizes: ['10yd', '20yd', '30yd'],
-  },
-  {
-    id: 'construction', label: 'Construction Debris', icon: '🔨',
-    description: 'Demolition, remodeling, construction waste',
-    sizes: ['10yd', '20yd', '30yd'],
-  },
-  {
-    id: 'roofing', label: 'Roofing', icon: '🏚️',
-    description: 'Shingles, roofing tear-offs, heavy debris',
-    sizes: ['10yd', '20yd', '30yd'],
-  },
-  {
-    id: 'green_waste', label: 'Green Waste', icon: '♻️',
-    description: 'Landscaping, branches, leaves, yard cleanup',
     sizes: ['10yd', '20yd', '30yd'],
   },
   {
@@ -83,7 +62,7 @@ export const SERVICE_TYPES = [
     sizes: ['10yd'],
   },
   {
-    id: 'mixed_materials', label: 'Mixed Materials', icon: '🔀',
+    id: 'mix', label: 'Mix', icon: '🔀',
     description: 'Clean soil, concrete & bricks mix. Must be 95% pure.',
     note: 'Extra fee: $150 if prohibited items added',
     sizes: ['10yd'],
