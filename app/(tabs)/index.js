@@ -76,8 +76,9 @@ export default function HomeScreen() {
   const [zipResult, setZipResult] = useState(null); // null, false, or city name string
 
   const stats = useMemo(() => {
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const monthBookings = bookings.filter(b => b.status !== 'cancelled' && (b.deliveryDate || '').startsWith(currentMonth));
+    const today = new Date().toISOString().slice(0, 10);
+    const currentMonth = today.slice(0, 7);
+    const monthBookings = bookings.filter(b => b.status !== 'cancelled' && (b.deliveryDate || '') >= currentMonth + '-01' && (b.deliveryDate || '') <= today);
     const totalRevenue = monthBookings.reduce((sum, b) => sum + (b.total || 0), 0);
 
     // Revenue by sales rep

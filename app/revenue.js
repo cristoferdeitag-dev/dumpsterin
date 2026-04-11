@@ -64,10 +64,8 @@ function getDateRange(filterId) {
       sunday.setDate(monday.getDate() + 6);
       return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
     }
-    case 'this_month': {
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      return { start: now.toISOString().slice(0, 7) + '-01', end: endOfMonth.toISOString().slice(0, 10) };
-    }
+    case 'this_month':
+      return { start: now.toISOString().slice(0, 7) + '-01', end: now.toISOString().slice(0, 10) };
     case 'last_month': {
       const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0);
