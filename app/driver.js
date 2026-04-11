@@ -13,6 +13,12 @@ import {
   Alert,
 } from 'react-native';
 import { useApp } from '../src/context/AppContext';
+
+function getDatePlusDays(dateStr, days) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
 import { useRouter } from 'expo-router';
 import { DELIVERY_WINDOWS } from '../src/data/mockData';
 
@@ -61,6 +67,14 @@ export default function DriverScreen() {
   const pickups = state.bookings.filter(
     b => b.pickupDate === today && b.status !== 'completed' && b.status !== 'cancelled'
   );
+
+  // Upcoming jobs (next 7 days, excluding today)
+  const upcoming = state.bookings.filter(b => {
+    if (b.status === 'completed' || b.status === 'cancelled') return false;
+    const d = b.deliveryDate || '';
+    const p = b.pickupDate || '';
+    return (d > today && d <= getDatePlusDays(today, 7)) || (p > today && p <= getDatePlusDays(today, 7));
+  }).sort((a, b) => (a.deliveryDate || a.pickupDate || '').localeCompare(b.deliveryDate || b.pickupDate || ''));
 
   const hasJobs = deliveries.length > 0 || pickups.length > 0;
 
@@ -116,6 +130,41 @@ export default function DriverScreen() {
               </View>
             )}
           </>
+        )}
+
+        {/* Upcoming Jobs */}
+        {upcoming.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1A1A1A', marginBottom: 12, letterSpacing: -0.3 }}>
+              Upcoming (Next 7 Days)
+            </Text>
+            {upcoming.map(booking => {
+              const isDelivery = booking.deliveryDate > today && booking.deliveryDate <= getDatePlusDays(today, 7);
+              const isPickup = booking.pickupDate > today && booking.pickupDate <= getDatePlusDays(today, 7);
+              const jobDate = isDelivery ? booking.deliveryDate : booking.pickupDate;
+              return (
+                <View key={booking.id + '-upcoming'} style={{
+                  backgroundColor: '#F7F7F7', borderRadius: 12, padding: 16, marginBottom: 10,
+                  borderLeftWidth: 4, borderLeftColor: isPickup ? '#ff5252' : '#FF8C00',
+                }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <View style={{
+                      backgroundColor: isPickup ? 'rgba(255,82,82,0.1)' : 'rgba(255,140,0,0.1)',
+                      paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999,
+                    }}>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: isPickup ? '#ff5252' : '#FF8C00', textTransform: 'uppercase', letterSpacing: 1 }}>
+                        {isPickup ? 'PICKUP' : 'DELIVERY'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#999' }}>{jobDate}</Text>
+                  </View>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A1A1A' }}>{booking.customerName}</Text>
+                  <Text style={{ fontSize: 13, color: '#666', marginTop: 2 }} numberOfLines={1}>{booking.deliveryAddress}</Text>
+                  <Text style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{booking.dumpsterSize} · {booking.deliveryWindow}</Text>
+                </View>
+              );
+            })}
+          </View>
         )}
 
         <View style={{ height: 40 }} />
