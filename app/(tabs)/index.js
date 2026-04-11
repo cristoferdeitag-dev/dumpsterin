@@ -286,16 +286,18 @@ export default function HomeScreen() {
 
         {/* Sales Rep Breakdown */}
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-          {Object.entries(stats.repRevenue || {}).sort((a, b) => b[1] - a[1]).map(([rep, rev]) => (
+          {Object.entries(stats.repRevenue || {}).sort((a, b) => b[1] - a[1]).map(([rep, rev]) => {
+            const displayName = rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep === 'phone' ? 'Asai (Phone)' : rep === 'website' ? 'Asai (Web)' : rep;
+            return (
             <View key={rep} style={{ flex: 1, backgroundColor: '#F7F7F7', borderRadius: 12, padding: 14 }}>
               <Text style={{ color: '#999999', fontSize: 10, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
-                {rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep}
+                {displayName}
               </Text>
               <Text style={{ color: '#FF8C00', fontSize: 20, fontWeight: '800' }}>
                 {formatCurrency(rev)}
               </Text>
             </View>
-          ))}
+          )})}
         </View>
 
         {/* Fleet Readiness Card */}
