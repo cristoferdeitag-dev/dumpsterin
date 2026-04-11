@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   SafeAreaView,
 } from 'react-native';
@@ -42,17 +43,58 @@ function getWeekOfMonth(dateStr) {
   return Math.ceil(day / 7);
 }
 
+const DATE_FILTERS = [
+  { id: 'this_week', label: 'This Week' },
+  { id: 'this_month', label: 'This Month' },
+  { id: 'last_month', label: 'Last Month' },
+  { id: 'all', label: 'All Time' },
+  { id: 'custom', label: 'Custom' },
+];
+
+function getDateRange(filterId) {
+  const now = new Date();
+  switch (filterId) {
+    case 'this_week': {
+      const day = now.getDay();
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
+    }
+    case 'this_month':
+      return { start: now.toISOString().slice(0, 7) + '-01', end: now.toISOString().slice(0, 10) };
+    case 'last_month': {
+      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { start: lm.toISOString().slice(0, 10), end: lmEnd.toISOString().slice(0, 10) };
+    }
+    case 'all':
+      return { start: '2000-01-01', end: '2099-12-31' };
+    default:
+      return { start: '2000-01-01', end: '2099-12-31' };
+  }
+}
+
 export default function RevenueScreen() {
   const router = useRouter();
   const { state } = useApp();
   const bookings = state.bookings || [];
 
+  const [dateFilter, setDateFilter] = useState('this_month');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
   const now = new Date();
-  const currentYM = now.toISOString().slice(0, 7); // YYYY-MM
+  const currentYM = now.toISOString().slice(0, 7);
 
   const stats = useMemo(() => {
+    const range = dateFilter === 'custom'
+      ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
+      : getDateRange(dateFilter);
+
     const completed = bookings.filter(
-      (b) => b.status !== 'cancelled'
+      (b) => b.status !== 'cancelled' && (b.deliveryDate || '') >= range.start && (b.deliveryDate || '') <= range.end
     );
     const totalRevenue = completed.reduce((s, b) => s + (b.total || 0), 0);
     const thisMonth = completed.filter((b) => (b.deliveryDate || '').startsWith(currentYM));
@@ -156,6 +198,47 @@ export default function RevenueScreen() {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
+        {/* Date Filter */}
+        <View style={{ marginBottom: 16 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+              {DATE_FILTERS.map(f => (
+                <TouchableOpacity
+                  key={f.id}
+                  onPress={() => setDateFilter(f.id)}
+                  style={{
+                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999,
+                    backgroundColor: dateFilter === f.id ? '#FF8C00' : '#F0F0F0',
+                  }}
+                >
+                  <Text style={{
+                    color: dateFilter === f.id ? '#FFFFFF' : '#666666',
+                    fontSize: 13, fontWeight: dateFilter === f.id ? '700' : '500',
+                  }}>{f.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+          {dateFilter === 'custom' && (
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+              <TextInput
+                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 10, fontSize: 14, color: '#333' }}
+                value={customStart}
+                onChangeText={setCustomStart}
+                placeholder="Start (YYYY-MM-DD)"
+                placeholderTextColor="#AAA"
+              />
+              <TextInput
+                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 10, fontSize: 14, color: '#333' }}
+                value={customEnd}
+                onChangeText={setCustomEnd}
+                placeholder="End (YYYY-MM-DD)"
+                placeholderTextColor="#AAA"
+              />
+            </View>
+          )}
+        </View>
+
         {/* Summary Cards */}
         <View style={s.cardsRow}>
           <View style={[s.card, s.cardHalf]}>

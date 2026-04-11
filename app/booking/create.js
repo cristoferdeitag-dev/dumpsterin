@@ -30,10 +30,10 @@ const bg = '#FFFFFF';
 const bgCard = '#F7F7F7';
 const bgElevated = '#EEEEEE';
 const bgInput = '#FFFFFF';
-const border = '#E0E0E0';
-const textColor = '#1A1A1A';
-const textSecondary = '#555555';
-const textMuted = '#999999';
+const border = '#333333';
+const textColor = '#333333';
+const textSecondary = '#666666';
+const textMuted = '#AAAAAA';
 const primary = '#ff8c00';
 const primaryLight = '#ffb77d';
 const primaryDark = '#CC5500';
@@ -1132,6 +1132,7 @@ export default function CreateBooking() {
             {renderPill('Check', paymentMethod === 'check', () => setPaymentMethod('check'))}
             {renderPill('Card', paymentMethod === 'card', () => setPaymentMethod('card'))}
             {renderPill('Zelle', paymentMethod === 'zelle', () => setPaymentMethod('zelle'))}
+            {renderPill('Pending', paymentMethod === 'pending', () => setPaymentMethod('pending'))}
           </View>
 
           {/* Two action buttons */}
