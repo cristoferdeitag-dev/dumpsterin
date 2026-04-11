@@ -270,7 +270,7 @@ export default function MapScreen() {
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEEEEE', borderRadius: 10, paddingHorizontal: 12 }}>
             <Ionicons name="search" size={16} color="#999999" />
             <TextInput
-              style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, color: '#1A1A1A', fontSize: 14 }}
+              style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, color: '#1A1A1A', fontSize: 16 }}
               value={zipCode}
               onChangeText={(val) => {
                 setZipCode(val.replace(/\D/g, '').slice(0, 5));
