@@ -262,7 +262,7 @@ export default function MapScreen() {
             <Text style={styles.legendText}>HQ</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#85cfff' }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#FF8C00' }]} />
             <Text style={styles.legendText}>Delivered</Text>
           </View>
         </View>

@@ -173,7 +173,7 @@ export default function RevenueScreen() {
       topCustomers,
       weeklyTrend,
     };
-  }, [bookings, currentYM]);
+  }, [bookings, currentYM, dateFilter, customStart, customEnd]);
 
   const maxRepRevenue = stats.byRep.length ? stats.byRep[0].revenue : 1;
   const maxSvcRevenue = stats.byService.length ? stats.byService[0].revenue : 1;

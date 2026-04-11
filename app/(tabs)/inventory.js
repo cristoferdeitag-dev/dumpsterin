@@ -294,28 +294,7 @@ export default function InventoryScreen() {
         }
       />
 
-      {/* FAB */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          bottom: 90,
-          right: 20,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: COLORS.primary,
-          alignItems: 'center',
-          justifyContent: 'center',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
-        }}
-        onPress={() => {}}
-      >
-        <Text style={{ fontSize: 28, fontWeight: '700', color: COLORS.on_primary, marginTop: -2 }}>+</Text>
-      </TouchableOpacity>
+      {/* FAB removed — dumpsters managed from settings */}
     </View>
   );
 }

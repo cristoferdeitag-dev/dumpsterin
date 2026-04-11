@@ -76,7 +76,7 @@ export default function HomeScreen() {
   const [zipResult, setZipResult] = useState(null); // null, false, or city name string
 
   const stats = useMemo(() => {
-    const totalRevenue = bookings.reduce((sum, b) => sum + (b.total || 0), 0);
+    const totalRevenue = bookings.filter(b => b.status !== 'cancelled').reduce((sum, b) => sum + (b.total || 0), 0);
     const activeBookings = bookings.filter(b => !['completed', 'cancelled'].includes(b.status));
     const completedBookings = bookings.filter(b => b.status === 'completed');
     const availableUnits = dumpsters.filter(d => d.status === 'available').length;
