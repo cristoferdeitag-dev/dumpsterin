@@ -164,11 +164,19 @@ export default function BookingsScreen() {
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
             <Ionicons name="calendar-outline" size={16} color={statusColor} />
             <Text style={{ color: '#e5e2e1', fontSize: 13, fontWeight: '600' }}>
               {booking.deliveryDate || booking.createdAt}
             </Text>
+            {booking.pickupDate && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 8 }}>
+                <Ionicons name="arrow-forward" size={12} color="#ff5252" />
+                <Text style={{ color: '#ff5252', fontSize: 11, fontWeight: '700' }}>
+                  Pickup {booking.pickupDate}
+                </Text>
+              </View>
+            )}
           </View>
           <Ionicons name="chevron-forward" size={16} color="#ddc1ae" />
         </View>

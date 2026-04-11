@@ -94,13 +94,24 @@ export default function ScheduleScreen() {
       map[idx] = [];
     });
     state.bookings.forEach((booking) => {
-      if (!booking.deliveryDate) return;
-      const bDate = new Date(booking.deliveryDate + 'T12:00:00');
-      weekDays.forEach((day, idx) => {
-        if (isSameDay(bDate, day)) {
-          map[idx].push(booking);
-        }
-      });
+      // Add delivery event
+      if (booking.deliveryDate) {
+        const bDate = new Date(booking.deliveryDate + 'T12:00:00');
+        weekDays.forEach((day, idx) => {
+          if (isSameDay(bDate, day)) {
+            map[idx].push({ ...booking, _eventType: 'delivery' });
+          }
+        });
+      }
+      // Add pickup event (separate entry)
+      if (booking.pickupDate) {
+        const pDate = new Date(booking.pickupDate + 'T12:00:00');
+        weekDays.forEach((day, idx) => {
+          if (isSameDay(pDate, day)) {
+            map[idx].push({ ...booking, _eventType: 'pickup', deliveryWindow: 'morning' });
+          }
+        });
+      }
     });
     return map;
   }, [state.bookings, weekDays]);
@@ -219,16 +230,18 @@ export default function ScheduleScreen() {
                           backgroundColor: isToday ? 'rgba(255,255,255,0.01)' : 'transparent',
                         }}
                       >
-                        {dayBookings.map((booking) => {
-                          const statusColor = getStatusColor(booking.status);
+                        {dayBookings.map((booking, bIdx) => {
+                          const isPickup = booking._eventType === 'pickup';
+                          const blockColor = isPickup ? '#ff5252' : getStatusColor(booking.status);
+                          const bgColor = isPickup ? 'rgba(255,82,82,0.1)' : (blockColor === COLORS.tertiary ? 'rgba(133,207,255,0.1)' : 'rgba(255,183,125,0.1)');
                           return (
                             <TouchableOpacity
-                              key={booking.id}
+                              key={booking.id + '-' + (isPickup ? 'p' : 'd') + bIdx}
                               onPress={() => router.push(`/booking/${booking.id}`)}
                               style={{
-                                backgroundColor: statusColor === COLORS.tertiary ? 'rgba(133,207,255,0.1)' : 'rgba(255,183,125,0.1)',
+                                backgroundColor: bgColor,
                                 borderLeftWidth: 3,
-                                borderLeftColor: statusColor,
+                                borderLeftColor: blockColor,
                                 borderTopRightRadius: 8,
                                 borderBottomRightRadius: 8,
                                 padding: 8,
@@ -238,18 +251,18 @@ export default function ScheduleScreen() {
                               <Text style={{
                                 fontSize: 9,
                                 fontWeight: '700',
-                                color: statusColor,
+                                color: blockColor,
                                 textTransform: 'uppercase',
                                 letterSpacing: 0.5,
                                 marginBottom: 2,
                               }}>
-                                {booking.status === 'in_transit' ? 'In Transit' : booking.status}
+                                {isPickup ? 'PICKUP' : (booking.status === 'in_transit' ? 'In Transit' : booking.status)}
                               </Text>
                               <Text style={{ fontWeight: '700', fontSize: 12, color: COLORS.on_surface }} numberOfLines={1}>
                                 {booking.customerName}
                               </Text>
                               <Text style={{ fontSize: 10, color: COLORS.on_surface_variant, marginTop: 2 }} numberOfLines={1}>
-                                {booking.dumpsterSize} Dumpster
+                                {booking.dumpsterSize} {isPickup ? 'Pickup' : 'Delivery'}
                               </Text>
                             </TouchableOpacity>
                           );
