@@ -76,7 +76,17 @@ export default function HomeScreen() {
   const [zipResult, setZipResult] = useState(null); // null, false, or city name string
 
   const stats = useMemo(() => {
-    const totalRevenue = bookings.filter(b => b.status !== 'cancelled').reduce((sum, b) => sum + (b.total || 0), 0);
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const monthBookings = bookings.filter(b => b.status !== 'cancelled' && (b.deliveryDate || '').startsWith(currentMonth));
+    const totalRevenue = monthBookings.reduce((sum, b) => sum + (b.total || 0), 0);
+
+    // Revenue by sales rep
+    const repRevenue = {};
+    monthBookings.forEach(b => {
+      const rep = b.generatedBy || b.source || 'unknown';
+      if (!repRevenue[rep]) repRevenue[rep] = 0;
+      repRevenue[rep] += b.total || 0;
+    });
     const activeBookings = bookings.filter(b => !['completed', 'cancelled'].includes(b.status));
     const completedBookings = bookings.filter(b => b.status === 'completed');
     const availableUnits = dumpsters.filter(d => d.status === 'available').length;
@@ -96,6 +106,7 @@ export default function HomeScreen() {
       totalUnits,
       availablePercent,
       revenueChange,
+      repRevenue,
     };
   }, [bookings, dumpsters]);
 
@@ -272,6 +283,20 @@ export default function HomeScreen() {
             </View>
           </View>
         </TouchableOpacity>
+
+        {/* Sales Rep Breakdown */}
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+          {Object.entries(stats.repRevenue || {}).sort((a, b) => b[1] - a[1]).map(([rep, rev]) => (
+            <View key={rep} style={{ flex: 1, backgroundColor: '#F7F7F7', borderRadius: 12, padding: 14 }}>
+              <Text style={{ color: '#999999', fontSize: 10, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+                {rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep}
+              </Text>
+              <Text style={{ color: '#FF8C00', fontSize: 20, fontWeight: '800' }}>
+                {formatCurrency(rev)}
+              </Text>
+            </View>
+          ))}
+        </View>
 
         {/* Fleet Readiness Card */}
         <View style={{
