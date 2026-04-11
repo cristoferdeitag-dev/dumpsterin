@@ -72,6 +72,9 @@ export async function deleteBooking(id) {
   if (error) console.error('deleteBooking error:', error);
 }
 
+// Dumpster UUID → Label lookup cache
+let _dumpsterLabelMap = {};
+
 // ── DUMPSTERS ──
 export async function fetchDumpsters() {
   const companyId = await getCompanyId();
@@ -81,17 +84,27 @@ export async function fetchDumpsters() {
     .eq('company_id', companyId)
     .order('label');
   if (error) { console.error('fetchDumpsters error:', error); return []; }
+  // Build UUID→label map
+  (data || []).forEach(d => { _dumpsterLabelMap[d.id] = d.label || d.id; });
   return (data || []).map(mapDumpsterFromDB);
 }
 
 export async function updateDumpsterStatus(id, status) {
-  // Map app status to DB status
+  // Map app status to DB status if needed
   const dbStatus = status === 'on_yard' ? 'available' : status === 'on_site' ? 'deployed' : status;
+  // Try by label first (app uses label as ID), then by UUID
   const { error } = await supabase
     .from('dumpsters')
     .update({ status: dbStatus })
-    .eq('id', id);
-  if (error) console.error('updateDumpsterStatus error:', error);
+    .eq('label', id);
+  if (error) {
+    // Fallback: try by UUID
+    const { error: err2 } = await supabase
+      .from('dumpsters')
+      .update({ status: dbStatus })
+      .eq('id', id);
+    if (err2) console.error('updateDumpsterStatus error:', err2);
+  }
 }
 
 // ── DRIVERS ──
@@ -143,7 +156,7 @@ function mapBookingFromDB(b) {
     discount: parseFloat(b.discount) || 0,
     specialItems: [],
     total: parseFloat(b.base_price || 0) - parseFloat(b.discount || 0),
-    assignedDumpster: b.dumpster_id || null,
+    assignedDumpster: b.dumpster_id ? (_dumpsterLabelMap[b.dumpster_id] || b.dumpster_id) : null,
     assignedDriver: b.driver_id || null,
     notes: b.notes || '',
     source: b.source || 'phone',
@@ -187,13 +200,12 @@ function mapBookingToDB(b, companyId) {
 function mapDumpsterFromDB(d) {
   const sizeLabel = d.size_yards ? `${d.size_yards} Yard` : '';
   return {
-    id: d.id,
-    label: d.label || d.id,
+    id: d.label || d.id,  // Use label (10YD-01) as the visible ID
     size: d.size_yards ? `${d.size_yards}yd` : '',
     sizeLabel,
-    status: mapDumpsterStatusFromDB(d.status),
-    assignedBooking: null, // TODO: join with bookings
-    _dbId: d.id,
+    status: d.status || 'available',  // Keep DB status as-is (available/deployed/maintenance)
+    assignedBooking: null,
+    _dbId: d.id,  // Keep UUID for DB operations
   };
 }
 
