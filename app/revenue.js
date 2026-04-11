@@ -7,7 +7,9 @@ import {
   TextInput,
   StyleSheet,
   SafeAreaView,
+  Modal,
 } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../src/context/AppContext';
@@ -84,6 +86,8 @@ export default function RevenueScreen() {
   const [dateFilter, setDateFilter] = useState('this_month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [showStartCal, setShowStartCal] = useState(false);
+  const [showEndCal, setShowEndCal] = useState(false);
 
   const now = new Date();
   const currentYM = now.toISOString().slice(0, 7);
@@ -221,22 +225,61 @@ export default function RevenueScreen() {
           </ScrollView>
           {dateFilter === 'custom' && (
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-              <TextInput
-                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 10, fontSize: 14, color: '#333' }}
-                value={customStart}
-                onChangeText={setCustomStart}
-                placeholder="Start (YYYY-MM-DD)"
-                placeholderTextColor="#AAA"
-              />
-              <TextInput
-                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 10, fontSize: 14, color: '#333' }}
-                value={customEnd}
-                onChangeText={setCustomEnd}
-                placeholder="End (YYYY-MM-DD)"
-                placeholderTextColor="#AAA"
-              />
+              <TouchableOpacity
+                onPress={() => setShowStartCal(true)}
+                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+              >
+                <Ionicons name="calendar-outline" size={16} color={customStart ? '#FF8C00' : '#AAA'} />
+                <Text style={{ fontSize: 14, color: customStart ? '#333' : '#AAA' }}>
+                  {customStart || 'Start date'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowEndCal(true)}
+                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+              >
+                <Ionicons name="calendar-outline" size={16} color={customEnd ? '#FF8C00' : '#AAA'} />
+                <Text style={{ fontSize: 14, color: customEnd ? '#333' : '#AAA' }}>
+                  {customEnd || 'End date'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
+
+          {/* Start Date Calendar Modal */}
+          <Modal visible={showStartCal} transparent animationType="fade">
+            <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }} activeOpacity={1} onPress={() => setShowStartCal(false)}>
+              <View style={{ backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', width: '100%', maxWidth: 400 }}>
+                <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#E8E8E8', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A1A1A' }}>Start Date</Text>
+                  <TouchableOpacity onPress={() => setShowStartCal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
+                </View>
+                <Calendar
+                  theme={{ selectedDayBackgroundColor: '#FF8C00', todayTextColor: '#FF8C00', arrowColor: '#FF8C00' }}
+                  onDayPress={(day) => { setCustomStart(day.dateString); setShowStartCal(false); }}
+                  markedDates={{ [customStart]: { selected: true, selectedColor: '#FF8C00' } }}
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+
+          {/* End Date Calendar Modal */}
+          <Modal visible={showEndCal} transparent animationType="fade">
+            <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }} activeOpacity={1} onPress={() => setShowEndCal(false)}>
+              <View style={{ backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', width: '100%', maxWidth: 400 }}>
+                <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#E8E8E8', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A1A1A' }}>End Date</Text>
+                  <TouchableOpacity onPress={() => setShowEndCal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
+                </View>
+                <Calendar
+                  theme={{ selectedDayBackgroundColor: '#FF8C00', todayTextColor: '#FF8C00', arrowColor: '#FF8C00' }}
+                  onDayPress={(day) => { setCustomEnd(day.dateString); setShowEndCal(false); }}
+                  markedDates={{ [customEnd]: { selected: true, selectedColor: '#FF8C00' } }}
+                  minDate={customStart || undefined}
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
         </View>
 
         {/* Summary Cards */}
