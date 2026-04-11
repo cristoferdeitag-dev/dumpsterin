@@ -5,58 +5,58 @@ import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 
 // Bay Area ZIP codes served by TP Dumpsters
-const SERVICE_ZIPS = new Set([
+const SERVICE_ZIPS = {
   // Oakland
-  '94601','94602','94603','94605','94606','94607','94608','94609','94610','94611','94612','94613','94618','94619','94621',
+  '94601': 'Oakland', '94602': 'Oakland', '94603': 'Oakland', '94605': 'Oakland', '94606': 'Oakland', '94607': 'Oakland', '94608': 'Oakland', '94609': 'Oakland', '94610': 'Oakland', '94611': 'Oakland', '94612': 'Oakland', '94613': 'Oakland', '94618': 'Oakland', '94619': 'Oakland', '94621': 'Oakland',
   // Berkeley
-  '94702','94703','94704','94705','94706','94707','94708','94709','94710',
+  '94702': 'Berkeley', '94703': 'Berkeley', '94704': 'Berkeley', '94705': 'Berkeley', '94706': 'Berkeley / Albany', '94707': 'Berkeley', '94708': 'Berkeley', '94709': 'Berkeley', '94710': 'Berkeley',
   // Richmond
-  '94801','94803','94804','94805','94806',
+  '94801': 'Richmond', '94803': 'Richmond', '94804': 'Richmond', '94805': 'Richmond', '94806': 'Richmond',
   // San Francisco
-  '94102','94103','94104','94105','94107','94108','94109','94110','94111','94112','94114','94115','94116','94117','94118','94121','94122','94123','94124','94127','94129','94130','94131','94132','94133','94134',
+  '94102': 'San Francisco', '94103': 'San Francisco', '94104': 'San Francisco', '94105': 'San Francisco', '94107': 'San Francisco', '94108': 'San Francisco', '94109': 'San Francisco', '94110': 'San Francisco', '94111': 'San Francisco', '94112': 'San Francisco', '94114': 'San Francisco', '94115': 'San Francisco', '94116': 'San Francisco', '94117': 'San Francisco', '94118': 'San Francisco', '94121': 'San Francisco', '94122': 'San Francisco', '94123': 'San Francisco', '94124': 'San Francisco', '94127': 'San Francisco', '94129': 'San Francisco', '94130': 'San Francisco', '94131': 'San Francisco', '94132': 'San Francisco', '94133': 'San Francisco', '94134': 'San Francisco',
   // Pinole
-  '94564',
-  // El Cerrito / Albany / San Pablo
-  '94530','94706','94803','94806',
+  '94564': 'Pinole',
+  // El Cerrito / San Pablo
+  '94530': 'El Cerrito',
   // Hercules / Rodeo
-  '94547','94572',
+  '94547': 'Hercules', '94572': 'Rodeo',
   // Vallejo
-  '94589','94590','94591','94592',
+  '94589': 'Vallejo', '94590': 'Vallejo', '94591': 'Vallejo', '94592': 'Vallejo',
   // Concord
-  '94518','94519','94520','94521',
+  '94518': 'Concord', '94519': 'Concord', '94520': 'Concord', '94521': 'Concord',
   // Walnut Creek
-  '94595','94596','94597','94598',
+  '94595': 'Walnut Creek', '94596': 'Walnut Creek', '94597': 'Walnut Creek', '94598': 'Walnut Creek',
   // Pleasant Hill / Martinez
-  '94523','94553',
+  '94523': 'Pleasant Hill', '94553': 'Martinez',
   // Hayward
-  '94541','94542','94544','94545',
+  '94541': 'Hayward', '94542': 'Hayward', '94544': 'Hayward', '94545': 'Hayward',
   // Fremont
-  '94536','94538','94539','94555',
+  '94536': 'Fremont', '94538': 'Fremont', '94539': 'Fremont', '94555': 'Fremont',
   // San Leandro
-  '94577','94578','94579',
+  '94577': 'San Leandro', '94578': 'San Leandro', '94579': 'San Leandro',
   // Castro Valley
-  '94546',
+  '94546': 'Castro Valley',
   // Union City
-  '94587',
+  '94587': 'Union City',
   // Napa
-  '94558','94559',
+  '94558': 'Napa', '94559': 'Napa',
   // Santa Rosa
-  '95401','95402','95403','95404','95405','95407','95409',
+  '95401': 'Santa Rosa', '95402': 'Santa Rosa', '95403': 'Santa Rosa', '95404': 'Santa Rosa', '95405': 'Santa Rosa', '95407': 'Santa Rosa', '95409': 'Santa Rosa',
   // Vacaville / Fairfield
-  '94533','94534','95687','95688',
+  '94533': 'Fairfield', '94534': 'Fairfield', '95687': 'Vacaville', '95688': 'Vacaville',
   // San Rafael / Novato
-  '94901','94903','94945','94947','94949',
+  '94901': 'San Rafael', '94903': 'San Rafael', '94945': 'Novato', '94947': 'Novato', '94949': 'Novato',
   // Petaluma
-  '94952','94954',
+  '94952': 'Petaluma', '94954': 'Petaluma',
   // Millbrae / San Bruno
-  '94010','94066',
+  '94010': 'Millbrae', '94066': 'San Bruno',
   // Orinda / Lafayette
-  '94549','94563',
+  '94549': 'Lafayette', '94563': 'Orinda',
   // Knightsen
-  '94548',
+  '94548': 'Knightsen',
   // Milpitas
-  '95035',
-]);
+  '95035': 'Milpitas',
+};
 
 const STATUS_COLORS = {
   scheduled: '#60a5fa',
@@ -73,7 +73,7 @@ export default function HomeScreen() {
   const { state } = useApp();
   const { bookings, dumpsters } = state;
   const [zipCode, setZipCode] = useState('');
-  const [zipResult, setZipResult] = useState(null); // null, true, false
+  const [zipResult, setZipResult] = useState(null); // null, false, or city name string
 
   const stats = useMemo(() => {
     const totalRevenue = bookings.reduce((sum, b) => sum + (b.total || 0), 0);
@@ -155,17 +155,20 @@ export default function HomeScreen() {
             </View>
             <TouchableOpacity
               onPress={() => {
-                if (zipCode.length === 5) setZipResult(SERVICE_ZIPS.has(zipCode));
+                if (zipCode.length === 5) {
+                  const city = SERVICE_ZIPS[zipCode];
+                  setZipResult(city ? city : false);
+                }
               }}
               style={{ backgroundColor: '#ff8c00', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
             >
               <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 14 }}>Check</Text>
             </TouchableOpacity>
           </View>
-          {zipResult === true && (
+          {typeof zipResult === 'string' && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, backgroundColor: 'rgba(133,207,255,0.1)', padding: 10, borderRadius: 8 }}>
               <Ionicons name="checkmark-circle" size={20} color="#85cfff" />
-              <Text style={{ color: '#85cfff', fontWeight: '700', fontSize: 14 }}>We service this area!</Text>
+              <Text style={{ color: '#85cfff', fontWeight: '700', fontSize: 14 }}>{zipCode} — {zipResult}, CA  ✅ We service this area!</Text>
             </View>
           )}
           {zipResult === false && (

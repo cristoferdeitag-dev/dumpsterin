@@ -22,21 +22,24 @@ import {
   SPECIAL_ITEM_FEES,
 } from '../../src/data/mockData';
 import {
-  bg,
-  bgCard,
-  bgElevated,
-  bgInput,
-  border,
-  primary,
-  primaryLight,
-  primaryDark,
-  success,
-  danger,
-  info,
-  text as textColor,
-  textSecondary,
-  textMuted,
+  status,
 } from '../../src/theme/colors';
+
+// White theme overrides for booking form
+const bg = '#FFFFFF';
+const bgCard = '#F7F7F7';
+const bgElevated = '#EEEEEE';
+const bgInput = '#FFFFFF';
+const border = '#E0E0E0';
+const textColor = '#1A1A1A';
+const textSecondary = '#555555';
+const textMuted = '#999999';
+const primary = '#ff8c00';
+const primaryLight = '#ffb77d';
+const primaryDark = '#CC5500';
+const success = '#00C853';
+const danger = '#FF3D00';
+const info = '#2196F3';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyAWkJznwQtNDv_MhFhdYvqBdfzAa3IIMew';
 const SOURCE_OPTIONS = ['phone', 'website', 'walkin'];
