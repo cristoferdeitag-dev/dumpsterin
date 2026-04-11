@@ -119,6 +119,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'paga cuando llegue',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-01',
   },
   // 2. Lorenzo — 20yd, delivery Apr 1 10AM, pickup Apr 1 11AM
@@ -143,6 +144,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'ya pago',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-01',
   },
   // 3. AJ Jimenez — 20yd, delivery Apr 2 11:30AM, pickup Apr 8 3PM
@@ -167,6 +169,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Paga cuando llega dumpster',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-02',
   },
   // 4. Willis — 30yd, delivery Apr 3 7AM, pickup Apr 4 1PM
@@ -191,6 +194,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: '',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-03',
   },
   // 5. Armando — 30yd, pickup only Apr 3 9AM
@@ -215,6 +219,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Paga zelle cuando llegue. Pickup only.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-03',
   },
   // 6. Jordan — 10yd, Clean Soil, delivery Apr 6 8AM, pickup Apr 7 4PM
@@ -239,6 +244,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'paga cuando llegue',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-06',
   },
   // 7. Zachary Shearer — 10yd, Clean Soil, delivery Apr 7 11:30AM, pickup Apr 10 3PM
@@ -263,6 +269,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Booking ID: TP-MNMGG8MV',
     source: 'website',
+    generatedBy: 'website',
     createdAt: '2026-04-07',
   },
   // 8. Brian Tsang — 20yd, delivery Apr 8 7:30AM, pickup Apr 15 9:30AM
@@ -287,6 +294,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Booking ID: TP-MNOSDOLD. Pickup scheduled Apr 15 9:30AM.',
     source: 'website',
+    generatedBy: 'website',
     createdAt: '2026-04-08',
   },
   // 9. Deborah Willow Oak Ranch — 30yd, delivery Apr 8 9AM, pickup Apr 15 7:30AM
@@ -311,6 +319,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Booking ID: TP-MNOWX6TP. Pickup scheduled Apr 15 7:30AM.',
     source: 'website',
+    generatedBy: 'website',
     createdAt: '2026-04-08',
   },
   // 10. Trenor — 30yd, delivery Apr 8 10:30AM, swaps Apr 9/10/11, pickup Apr 15 10:30AM
@@ -335,6 +344,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Multiple swaps Apr 9, 10, 11. Pickup scheduled Apr 15 10:30AM.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-08',
   },
   // 11. Sukh — 30yd, delivery Apr 8 1PM, swap Apr 9, pickup Apr 10 1PM
@@ -359,6 +369,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Swap Apr 9. Pickup Apr 10 1PM.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-08',
   },
   // 12. Natalie — 30yd, swap Apr 3 1PM, pickup Apr 10 5PM
@@ -383,6 +394,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'ya pago. Swap Apr 3 1PM. Pickup Apr 10 5PM.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-03',
   },
   // 13. Tom — 20yd, delivery Apr 10 8AM
@@ -407,6 +419,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'pagado. Esperar 30min',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-10',
   },
   // 14. Ayman — 30yd, swap Apr 7 7:30AM, pickup Apr 14 7:30AM
@@ -431,6 +444,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Poner proteccion. Swap Apr 7 7:30AM. Pickup scheduled Apr 14 7:30AM.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-07',
   },
   // 15. Luis — 20yd, delivery Apr 9 12PM, pickup Apr 16 12PM
@@ -455,6 +469,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Pickup scheduled Apr 16 12PM.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-09',
   },
   // 16. John — 20yd, delivery Apr 9 3PM, pickup Apr 16 2PM
@@ -479,6 +494,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Pickup scheduled Apr 16 2PM.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-09',
   },
   // 17. Villatoro — 30yd, swaps Apr 10, Apr 13, Apr 20
@@ -503,6 +519,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Ongoing swaps: Apr 10, Apr 13, Apr 20.',
     source: 'phone',
+    generatedBy: 'tiago',
     createdAt: '2026-04-10',
   },
   // 18. Kingdomconcrete — 10yd, Clean Concrete, delivery Apr 13 11AM + second delivery 1PM
@@ -527,6 +544,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Two deliveries: 11AM and 1PM.',
     source: 'phone',
+    generatedBy: 'tiago',
     createdAt: '2026-04-10',
   },
   // 19. Willy — 30yd, delivery Apr 24 7:30AM, swap Apr 25
@@ -551,6 +569,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Swap scheduled Apr 25.',
     source: 'phone',
+    generatedBy: 'asai',
     createdAt: '2026-04-10',
   },
 ];
