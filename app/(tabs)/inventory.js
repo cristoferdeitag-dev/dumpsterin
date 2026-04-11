@@ -4,23 +4,23 @@ import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 
 const COLORS = {
-  surface: '#131313',
-  surface_container_low: '#1c1b1b',
-  surface_container: '#20201f',
-  surface_container_high: '#2a2a2a',
-  surface_container_highest: '#353535',
-  surface_container_lowest: '#0e0e0e',
-  surface_bright: '#393939',
+  surface: '#FFFFFF',
+  surface_container_low: '#F7F7F7',
+  surface_container: '#F2F2F2',
+  surface_container_high: '#EEEEEE',
+  surface_container_highest: '#E8E8E8',
+  surface_container_lowest: '#F0F0F0',
+  surface_bright: '#E0E0E0',
   primary: '#ffb77d',
   primary_container: '#ff8c00',
   on_primary: '#4d2600',
-  on_surface: '#e5e2e1',
-  on_surface_variant: '#ddc1ae',
+  on_surface: '#1A1A1A',
+  on_surface_variant: '#666666',
   tertiary: '#85cfff',
   on_tertiary: '#00344c',
   error: '#ffb4ab',
-  outline_variant: '#564334',
-  secondary_container: '#474747',
+  outline_variant: '#E0E0E0',
+  secondary_container: '#D0D0D0',
 };
 
 const DUMPSTER_IMAGES = {
@@ -243,17 +243,25 @@ export default function InventoryScreen() {
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
               {['10yd', '20yd', '30yd'].map((size) => {
                 const s = counts.sizes[size] || { total: 0, available: 0 };
-                const label = size.replace('yd', ' Yard');
+                const delivered = s.total - s.available;
+                const label = size.replace('yd', ' YARD');
+                const pct = s.total > 0 ? (s.available / s.total) * 100 : 0;
                 return (
-                  <View key={size} style={{ flex: 1, backgroundColor: COLORS.surface_container_low, borderRadius: 12, padding: 14, alignItems: 'center' }}>
-                    <Text style={{ color: COLORS.on_surface, fontWeight: '800', fontSize: 22, letterSpacing: -0.5 }}>
-                      {s.available}/{s.total}
-                    </Text>
-                    <Text style={{ color: COLORS.on_surface_variant, fontSize: 10, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginTop: 4 }}>
+                  <View key={size} style={{ flex: 1, backgroundColor: COLORS.surface_container_low, borderRadius: 14, padding: 14 }}>
+                    <Text style={{ color: COLORS.on_surface, fontWeight: '900', fontSize: 16, letterSpacing: 1, textAlign: 'center', marginBottom: 10 }}>
                       {label}
                     </Text>
-                    <View style={{ width: '100%', height: 4, backgroundColor: COLORS.surface_container_lowest, borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-                      <View style={{ width: s.total > 0 ? `${(s.available / s.total) * 100}%` : '0%', height: '100%', backgroundColor: s.available > 0 ? COLORS.primary : COLORS.error, borderRadius: 2 }} />
+                    <Text style={{ color: COLORS.on_surface_variant, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>
+                      Total: <Text style={{ color: COLORS.on_surface, fontWeight: '800', fontSize: 18 }}>{s.total}</Text>
+                    </Text>
+                    <Text style={{ color: 'rgba(76,217,100,0.9)', fontSize: 11, fontWeight: '600', marginBottom: 2 }}>
+                      Available: <Text style={{ fontWeight: '800', fontSize: 18 }}>{s.available}</Text>
+                    </Text>
+                    <Text style={{ color: COLORS.tertiary, fontSize: 11, fontWeight: '600', marginBottom: 8 }}>
+                      Delivered: <Text style={{ fontWeight: '800', fontSize: 18 }}>{delivered}</Text>
+                    </Text>
+                    <View style={{ width: '100%', height: 5, backgroundColor: COLORS.surface_container_lowest, borderRadius: 3, overflow: 'hidden' }}>
+                      <View style={{ width: `${pct}%`, height: '100%', backgroundColor: s.available > 0 ? '#4cd964' : COLORS.error, borderRadius: 3 }} />
                     </View>
                   </View>
                 );

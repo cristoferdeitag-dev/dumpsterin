@@ -13,16 +13,16 @@ import { useApp } from '../src/context/AppContext';
 
 // Design system — "Industrial Sophistication"
 const C = {
-  surface: '#131313',
-  surfaceLow: '#1c1b1b',
-  surfaceHigh: '#2a2a2a',
-  surfaceHighest: '#353535',
-  surfaceLowest: '#0e0e0e',
+  surface: '#FFFFFF',
+  surfaceLow: '#F7F7F7',
+  surfaceHigh: '#EEEEEE',
+  surfaceHighest: '#E8E8E8',
+  surfaceLowest: '#F0F0F0',
   primary: '#ffb77d',
   primaryContainer: '#ff8c00',
   onPrimary: '#4d2600',
-  onSurface: '#e5e2e1',
-  onSurfaceVariant: '#ddc1ae',
+  onSurface: '#1A1A1A',
+  onSurfaceVariant: '#666666',
   tertiary: '#85cfff',
   error: '#ffb4ab',
 };

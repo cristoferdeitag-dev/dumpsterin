@@ -4,22 +4,22 @@ import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 
 const COLORS = {
-  surface: '#131313',
-  surface_container_low: '#1c1b1b',
-  surface_container: '#20201f',
-  surface_container_high: '#2a2a2a',
-  surface_container_highest: '#353535',
-  surface_container_lowest: '#0e0e0e',
-  surface_bright: '#393939',
+  surface: '#FFFFFF',
+  surface_container_low: '#F7F7F7',
+  surface_container: '#F2F2F2',
+  surface_container_high: '#EEEEEE',
+  surface_container_highest: '#E8E8E8',
+  surface_container_lowest: '#F0F0F0',
+  surface_bright: '#E0E0E0',
   primary: '#ffb77d',
   primary_container: '#ff8c00',
   on_primary: '#4d2600',
-  on_surface: '#e5e2e1',
-  on_surface_variant: '#ddc1ae',
+  on_surface: '#1A1A1A',
+  on_surface_variant: '#666666',
   tertiary: '#85cfff',
   error: '#ffb4ab',
-  outline_variant: '#564334',
-  secondary_container: '#474747',
+  outline_variant: '#E0E0E0',
+  secondary_container: '#D0D0D0',
 };
 
 const HOURS = [
@@ -121,9 +121,13 @@ export default function ScheduleScreen() {
   const utilization = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
 
   const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
   const GUTTER_WIDTH = 44;
   const COL_WIDTH = Math.floor((screenWidth - 32 - GUTTER_WIDTH) / 7);
-  const ROW_HEIGHT = 90;
+  const HEADER_HEIGHT = 140; // header + nav + day headers
+  const TAB_BAR_HEIGHT = 72;
+  const availableHeight = screenHeight - HEADER_HEIGHT - TAB_BAR_HEIGHT - 40;
+  const ROW_HEIGHT = Math.max(Math.floor(availableHeight / HOURS.length), 36);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -159,6 +163,42 @@ export default function ScheduleScreen() {
             style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
           >
             <Text style={{ color: COLORS.on_surface, fontSize: 20 }}>{'>'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Summary Row */}
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+          <View style={{ flex: 1, backgroundColor: COLORS.surface_container_high, padding: 14, borderRadius: 12 }}>
+            <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant, marginBottom: 4 }}>
+              Weekly Capacity
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
+              <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 }}>
+                {utilization}%
+              </Text>
+              <Text style={{ color: COLORS.secondary_container, fontSize: 11, marginBottom: 2 }}>
+                Util.
+              </Text>
+            </View>
+            <View style={{ height: 4, width: '100%', backgroundColor: COLORS.surface_container_lowest, borderRadius: 9999, overflow: 'hidden', marginTop: 6 }}>
+              <View style={{ height: '100%', width: `${Math.min(utilization, 100)}%`, backgroundColor: COLORS.primary, borderRadius: 9999 }} />
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => router.push('/booking/create')}
+            style={{ flex: 1, backgroundColor: COLORS.surface_container_low, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,183,125,0.2)', justifyContent: 'center' }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View>
+                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.primary, marginBottom: 2 }}>
+                  Quick Action
+                </Text>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5 }}>
+                  New Booking
+                </Text>
+              </View>
+              <Text style={{ fontSize: 24, color: COLORS.primary }}>+</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -275,47 +315,6 @@ export default function ScheduleScreen() {
             </View>
         </View>
 
-        {/* Summary Cards */}
-        <View style={{ marginTop: 32, gap: 16 }}>
-          {/* Weekly Capacity */}
-          <View style={{ backgroundColor: COLORS.surface_container_high, padding: 24, borderRadius: 16 }}>
-            <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 10, color: COLORS.on_surface_variant, marginBottom: 12 }}>
-              Weekly Capacity
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 16 }}>
-              <Text style={{ fontSize: 32, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 }}>
-                {utilization}%
-              </Text>
-              <Text style={{ color: COLORS.secondary_container, fontSize: 13, marginBottom: 4 }}>
-                Utilization
-              </Text>
-            </View>
-            <View style={{ height: 6, width: '100%', backgroundColor: COLORS.surface_container_lowest, borderRadius: 9999, overflow: 'hidden' }}>
-              <View style={{ height: '100%', width: `${Math.min(utilization, 100)}%`, backgroundColor: COLORS.primary, borderRadius: 9999 }} />
-            </View>
-          </View>
-
-          {/* Quick Action */}
-          <TouchableOpacity
-            onPress={() => router.push('/booking/create')}
-            style={{ backgroundColor: COLORS.surface_container_low, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,183,125,0.2)' }}
-          >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <View>
-                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 10, color: COLORS.primary, marginBottom: 4 }}>
-                  Quick Action
-                </Text>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5 }}>
-                  New Booking
-                </Text>
-              </View>
-              <Text style={{ fontSize: 28, color: COLORS.primary }}>+</Text>
-            </View>
-            <Text style={{ color: COLORS.on_surface_variant, fontSize: 13, marginTop: 12 }}>
-              Manually insert a haul into the current weekly grid.
-            </Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </View>
   );

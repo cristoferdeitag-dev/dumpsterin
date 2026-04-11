@@ -61,10 +61,10 @@ const SERVICE_ZIPS = {
 const STATUS_COLORS = {
   scheduled: '#60a5fa',
   in_transit: '#ffb77d',
-  delivered: '#737373',
+  delivered: '#999999',
   pickup_ready: '#00b5fc',
   picked_up: '#85cfff',
-  completed: '#737373',
+  completed: '#999999',
   cancelled: '#ffb4ab',
 };
 
@@ -110,7 +110,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#131313' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
@@ -119,7 +119,7 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={{ marginBottom: 32 }}>
           <Text style={{
-            color: '#e5e2e1',
+            color: '#1A1A1A',
             fontSize: 32,
             fontWeight: '800',
             letterSpacing: -0.5,
@@ -127,28 +127,28 @@ export default function HomeScreen() {
           }}>
             Fleet Overview
           </Text>
-          <Text style={{ color: '#ddc1ae', fontWeight: '500', fontSize: 14 }}>
+          <Text style={{ color: '#666666', fontWeight: '500', fontSize: 14 }}>
             Real-time logistics and revenue tracking
           </Text>
         </View>
 
         {/* ZIP Code Search */}
-        <View style={{ backgroundColor: '#1c1b1b', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <Text style={{ color: '#ddc1ae', fontSize: 10, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>
+        <View style={{ backgroundColor: '#F7F7F7', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <Text style={{ color: '#666666', fontSize: 10, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>
             Service Area Check
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#353535', borderRadius: 10, paddingHorizontal: 14 }}>
-              <Ionicons name="search" size={18} color="#737373" />
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8E8E8', borderRadius: 10, paddingHorizontal: 14 }}>
+              <Ionicons name="search" size={18} color="#999999" />
               <TextInput
-                style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 10, color: '#e5e2e1', fontSize: 16 }}
+                style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 10, color: '#1A1A1A', fontSize: 16 }}
                 value={zipCode}
                 onChangeText={(val) => {
                   setZipCode(val.replace(/\D/g, '').slice(0, 5));
                   if (val.length < 5) setZipResult(null);
                 }}
                 placeholder="Enter ZIP code..."
-                placeholderTextColor="#737373"
+                placeholderTextColor="#999999"
                 keyboardType="numeric"
                 maxLength={5}
               />
@@ -184,7 +184,7 @@ export default function HomeScreen() {
           onPress={() => router.push('/revenue')}
           activeOpacity={0.85}
           style={{
-          backgroundColor: '#1c1b1b',
+          backgroundColor: '#F7F7F7',
           borderRadius: 12,
           padding: 24,
           marginBottom: 16,
@@ -205,7 +205,7 @@ export default function HomeScreen() {
           }} />
 
           <Text style={{
-            color: '#ddc1ae',
+            color: '#666666',
             fontSize: 10,
             fontWeight: '600',
             letterSpacing: 2,
@@ -231,13 +231,13 @@ export default function HomeScreen() {
 
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
             <View style={{
-              backgroundColor: '#353535',
+              backgroundColor: '#E8E8E8',
               paddingHorizontal: 16,
               paddingVertical: 10,
               borderRadius: 8,
             }}>
               <Text style={{
-                color: '#ddc1ae',
+                color: '#666666',
                 fontSize: 10,
                 fontWeight: '600',
                 letterSpacing: 2,
@@ -246,18 +246,18 @@ export default function HomeScreen() {
               }}>
                 Active Bookings
               </Text>
-              <Text style={{ color: '#e5e2e1', fontSize: 20, fontWeight: '800' }}>
+              <Text style={{ color: '#1A1A1A', fontSize: 20, fontWeight: '800' }}>
                 {stats.activeCount}
               </Text>
             </View>
             <View style={{
-              backgroundColor: '#353535',
+              backgroundColor: '#E8E8E8',
               paddingHorizontal: 16,
               paddingVertical: 10,
               borderRadius: 8,
             }}>
               <Text style={{
-                color: '#ddc1ae',
+                color: '#666666',
                 fontSize: 10,
                 fontWeight: '600',
                 letterSpacing: 2,
@@ -275,13 +275,13 @@ export default function HomeScreen() {
 
         {/* Fleet Readiness Card */}
         <View style={{
-          backgroundColor: '#2a2a2a',
+          backgroundColor: '#EEEEEE',
           borderRadius: 12,
           padding: 24,
           marginBottom: 16,
         }}>
           <Text style={{
-            color: '#e5e2e1',
+            color: '#1A1A1A',
             fontSize: 18,
             fontWeight: '800',
             letterSpacing: -0.5,
@@ -293,9 +293,9 @@ export default function HomeScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#85cfff' }} />
-              <Text style={{ color: '#e5e2e1', fontWeight: '500', fontSize: 14 }}>Available Units</Text>
+              <Text style={{ color: '#1A1A1A', fontWeight: '500', fontSize: 14 }}>Available Units</Text>
             </View>
-            <Text style={{ color: '#e5e2e1', fontSize: 22, fontWeight: '800' }}>
+            <Text style={{ color: '#1A1A1A', fontSize: 22, fontWeight: '800' }}>
               {stats.availableUnits}
             </Text>
           </View>
@@ -304,7 +304,7 @@ export default function HomeScreen() {
           <View style={{
             width: '100%',
             height: 6,
-            backgroundColor: '#0e0e0e',
+            backgroundColor: '#F0F0F0',
             borderRadius: 3,
             overflow: 'hidden',
             marginBottom: 20,
@@ -321,7 +321,7 @@ export default function HomeScreen() {
           <View style={{ flexDirection: 'row', gap: 16 }}>
             <View style={{ flex: 1 }}>
               <Text style={{
-                color: '#ddc1ae',
+                color: '#666666',
                 fontSize: 10,
                 fontWeight: '600',
                 letterSpacing: 2,
@@ -336,7 +336,7 @@ export default function HomeScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{
-                color: '#ddc1ae',
+                color: '#666666',
                 fontSize: 10,
                 fontWeight: '600',
                 letterSpacing: 2,
@@ -354,7 +354,7 @@ export default function HomeScreen() {
 
         {/* Live Unit Tracking */}
         <View style={{
-          backgroundColor: '#1c1b1b',
+          backgroundColor: '#F7F7F7',
           borderRadius: 12,
           padding: 24,
           marginBottom: 16,
@@ -363,7 +363,7 @@ export default function HomeScreen() {
         }}>
           <View>
             <Text style={{
-              color: '#e5e2e1',
+              color: '#1A1A1A',
               fontSize: 16,
               fontWeight: '800',
               letterSpacing: -0.5,
@@ -371,7 +371,7 @@ export default function HomeScreen() {
             }}>
               Live Unit Tracking
             </Text>
-            <Text style={{ color: '#ddc1ae', fontSize: 12, fontWeight: '400' }}>
+            <Text style={{ color: '#666666', fontSize: 12, fontWeight: '400' }}>
               {stats.deployedUnits} Active units in service area
             </Text>
           </View>
@@ -403,7 +403,7 @@ export default function HomeScreen() {
         <View style={{ marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>
             <Text style={{
-              color: '#e5e2e1',
+              color: '#1A1A1A',
               fontSize: 16,
               fontWeight: '800',
               letterSpacing: -0.5,
@@ -424,14 +424,14 @@ export default function HomeScreen() {
           </View>
 
           {recentBookings.map((booking) => {
-            const borderColor = STATUS_COLORS[booking.status] || '#737373';
+            const borderColor = STATUS_COLORS[booking.status] || '#999999';
             return (
               <TouchableOpacity
                 key={booking.id}
                 onPress={() => router.push(`/booking/${booking.id}`)}
                 activeOpacity={0.7}
                 style={{
-                  backgroundColor: '#353535',
+                  backgroundColor: '#E8E8E8',
                   borderRadius: 12,
                   padding: 16,
                   marginBottom: 10,
@@ -441,10 +441,10 @@ export default function HomeScreen() {
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                   <View>
-                    <Text style={{ color: '#e5e2e1', fontSize: 16, fontWeight: '800' }}>
+                    <Text style={{ color: '#1A1A1A', fontSize: 16, fontWeight: '800' }}>
                       {booking.customerName}
                     </Text>
-                    <Text style={{ color: '#ddc1ae', fontSize: 12, marginTop: 2 }}>
+                    <Text style={{ color: '#666666', fontSize: 12, marginTop: 2 }}>
                       {booking.dumpsterSize ? `${booking.dumpsterSize.replace('yd', '')}-Yard Dumpster` : 'Dumpster'}
                     </Text>
                   </View>
@@ -467,8 +467,8 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                  <Ionicons name="location-outline" size={12} color="#ddc1ae" />
-                  <Text style={{ color: '#ddc1ae', fontSize: 12, fontWeight: '400' }} numberOfLines={1}>
+                  <Ionicons name="location-outline" size={12} color="#666666" />
+                  <Text style={{ color: '#666666', fontSize: 12, fontWeight: '400' }} numberOfLines={1}>
                     {booking.deliveryAddress}
                   </Text>
                 </View>
@@ -485,7 +485,7 @@ export default function HomeScreen() {
                     ${booking.total?.toFixed(2)}
                   </Text>
                   <Text style={{
-                    color: '#ddc1ae',
+                    color: '#666666',
                     fontSize: 10,
                     fontWeight: '600',
                     textTransform: 'uppercase',

@@ -7,10 +7,10 @@ import { useApp } from '../../src/context/AppContext';
 const STATUS_COLORS = {
   scheduled: '#60a5fa',
   in_transit: '#ffb77d',
-  delivered: '#737373',
+  delivered: '#999999',
   pickup_ready: '#00b5fc',
   picked_up: '#85cfff',
-  completed: '#737373',
+  completed: '#999999',
   cancelled: '#ffb4ab',
 };
 
@@ -51,7 +51,7 @@ export default function BookingsScreen() {
   }, [bookings, detailFilter]);
 
   const renderBookingCard = useCallback(({ item: booking }) => {
-    const statusColor = STATUS_COLORS[booking.status] || '#737373';
+    const statusColor = STATUS_COLORS[booking.status] || '#999999';
     const sizeNum = booking.dumpsterSize ? booking.dumpsterSize.replace('yd', '') : '--';
 
     return (
@@ -59,7 +59,7 @@ export default function BookingsScreen() {
         onPress={() => router.push(`/booking/${booking.id}`)}
         activeOpacity={0.7}
         style={{
-          backgroundColor: '#1c1b1b',
+          backgroundColor: '#F7F7F7',
           borderRadius: 12,
           overflow: 'hidden',
           marginBottom: 14,
@@ -90,7 +90,7 @@ export default function BookingsScreen() {
               </Text>
             </View>
             <Text style={{
-              color: '#ddc1ae',
+              color: '#666666',
               fontSize: 11,
               fontWeight: '500',
               fontVariant: ['tabular-nums'],
@@ -102,7 +102,7 @@ export default function BookingsScreen() {
 
           {/* Customer name */}
           <Text style={{
-            color: '#e5e2e1',
+            color: '#1A1A1A',
             fontSize: 18,
             fontWeight: '800',
             letterSpacing: -0.3,
@@ -113,8 +113,8 @@ export default function BookingsScreen() {
 
           {/* Address */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 18 }}>
-            <Ionicons name="location-outline" size={13} color="#ddc1ae" />
-            <Text style={{ color: '#ddc1ae', fontSize: 13, fontWeight: '400' }} numberOfLines={1}>
+            <Ionicons name="location-outline" size={13} color="#666666" />
+            <Text style={{ color: '#666666', fontSize: 13, fontWeight: '400' }} numberOfLines={1}>
               {booking.deliveryAddress}
             </Text>
           </View>
@@ -123,7 +123,7 @@ export default function BookingsScreen() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
               <Text style={{
-                color: '#ddc1ae',
+                color: '#666666',
                 fontSize: 10,
                 fontWeight: '600',
                 letterSpacing: 2,
@@ -132,14 +132,14 @@ export default function BookingsScreen() {
               }}>
                 Container Size
               </Text>
-              <Text style={{ color: '#e5e2e1', fontSize: 24, fontWeight: '800', fontStyle: 'italic' }}>
+              <Text style={{ color: '#1A1A1A', fontSize: 24, fontWeight: '800', fontStyle: 'italic' }}>
                 {sizeNum}
                 <Text style={{ fontSize: 12, fontWeight: '700', fontStyle: 'normal' }}> yd</Text>
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={{
-                color: '#ddc1ae',
+                color: '#666666',
                 fontSize: 10,
                 fontWeight: '600',
                 letterSpacing: 2,
@@ -157,7 +157,7 @@ export default function BookingsScreen() {
 
         {/* Footer bar */}
         <View style={{
-          backgroundColor: '#353535',
+          backgroundColor: '#E8E8E8',
           paddingHorizontal: 20,
           paddingVertical: 14,
           flexDirection: 'row',
@@ -166,7 +166,7 @@ export default function BookingsScreen() {
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
             <Ionicons name="calendar-outline" size={16} color={statusColor} />
-            <Text style={{ color: '#e5e2e1', fontSize: 13, fontWeight: '600' }}>
+            <Text style={{ color: '#1A1A1A', fontSize: 13, fontWeight: '600' }}>
               {booking.deliveryDate || booking.createdAt}
             </Text>
             {booking.pickupDate && (
@@ -178,18 +178,18 @@ export default function BookingsScreen() {
               </View>
             )}
           </View>
-          <Ionicons name="chevron-forward" size={16} color="#ddc1ae" />
+          <Ionicons name="chevron-forward" size={16} color="#666666" />
         </View>
       </TouchableOpacity>
     );
   }, [router]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#131313' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
       {/* Header */}
       <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
         <Text style={{
-          color: '#ddc1ae',
+          color: '#666666',
           fontSize: 10,
           fontWeight: '600',
           letterSpacing: 2,
@@ -199,7 +199,7 @@ export default function BookingsScreen() {
           Management Console
         </Text>
         <Text style={{
-          color: '#e5e2e1',
+          color: '#1A1A1A',
           fontSize: 32,
           fontWeight: '800',
           letterSpacing: -0.5,
@@ -220,7 +220,7 @@ export default function BookingsScreen() {
                   setTopFilter('all');
                 }}
                 style={{
-                  backgroundColor: detailFilter === filter.id ? '#353535' : '#1c1b1b',
+                  backgroundColor: detailFilter === filter.id ? '#E8E8E8' : '#F7F7F7',
                   paddingHorizontal: 16,
                   paddingVertical: 10,
                   borderRadius: 9999,
@@ -231,7 +231,7 @@ export default function BookingsScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={{
-                  color: detailFilter === filter.id ? '#ffb77d' : '#ddc1ae',
+                  color: detailFilter === filter.id ? '#ffb77d' : '#666666',
                   fontSize: 13,
                   fontWeight: detailFilter === filter.id ? '700' : '500',
                 }}>
@@ -252,8 +252,8 @@ export default function BookingsScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={{ alignItems: 'center', paddingTop: 60 }}>
-            <Ionicons name="document-text-outline" size={48} color="#474747" />
-            <Text style={{ color: '#ddc1ae', fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+            <Ionicons name="document-text-outline" size={48} color="#D0D0D0" />
+            <Text style={{ color: '#666666', fontSize: 14, marginTop: 12, fontWeight: '500' }}>
               No bookings found
             </Text>
           </View>

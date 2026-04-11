@@ -158,17 +158,7 @@ export default function MapScreen() {
       center: BAY_AREA_CENTER,
       zoom: 10,
       mapId: 'dumpsterin-fleet',
-      styles: [
-        { elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
-        { elementType: 'labels.text.stroke', stylers: [{ color: '#0D0D0D' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#666666' }] },
-        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2A2A2A' }] },
-        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#888' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d2d3d' }] },
-        { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#446477' }] },
-        { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-        { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-      ],
+      styles: [],
       disableDefaultUI: true,
       zoomControl: true,
       fullscreenControl: true,
@@ -277,17 +267,17 @@ export default function MapScreen() {
       {/* ZIP Code Search */}
       <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 12 }}>
-            <Ionicons name="search" size={16} color="#737373" />
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEEEEE', borderRadius: 10, paddingHorizontal: 12 }}>
+            <Ionicons name="search" size={16} color="#999999" />
             <TextInput
-              style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, color: '#e5e2e1', fontSize: 14 }}
+              style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, color: '#1A1A1A', fontSize: 14 }}
               value={zipCode}
               onChangeText={(val) => {
                 setZipCode(val.replace(/\D/g, '').slice(0, 5));
                 if (val.length < 5) setZipResult(null);
               }}
               placeholder="Search ZIP code..."
-              placeholderTextColor="#737373"
+              placeholderTextColor="#999999"
               keyboardType="numeric"
               maxLength={5}
               onSubmitEditing={searchZipOnMap}

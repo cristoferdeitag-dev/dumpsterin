@@ -17,16 +17,16 @@ import { useRouter } from 'expo-router';
 import { DELIVERY_WINDOWS } from '../src/data/mockData';
 
 const C = {
-  surface: '#131313',
-  surface_container_low: '#1c1b1b',
-  surface_container_high: '#2a2a2a',
-  surface_container_highest: '#353535',
-  surface_container_lowest: '#0e0e0e',
+  surface: '#FFFFFF',
+  surface_container_low: '#F7F7F7',
+  surface_container_high: '#EEEEEE',
+  surface_container_highest: '#E8E8E8',
+  surface_container_lowest: '#F0F0F0',
   primary: '#ffb77d',
   primary_container: '#ff8c00',
   on_primary: '#4d2600',
-  on_surface: '#e5e2e1',
-  on_surface_variant: '#ddc1ae',
+  on_surface: '#1A1A1A',
+  on_surface_variant: '#666666',
   tertiary: '#85cfff',
   error: '#ffb4ab',
 };
@@ -259,7 +259,7 @@ function JobCard({ booking, type, dispatch, dumpsters }) {
             style={[s.statusButton, { backgroundColor: C.tertiary }]}
             onPress={() => handleStatusUpdate('in_transit')}
           >
-            <Text style={[s.statusButtonText, { color: '#0e0e0e' }]}>En Camino</Text>
+            <Text style={[s.statusButtonText, { color: '#1A1A1A' }]}>En Camino</Text>
           </TouchableOpacity>
         )}
 
@@ -520,7 +520,7 @@ const s = StyleSheet.create({
   navButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0e0e0e',
+    color: '#1A1A1A',
   },
   callButton: {
     flex: 1,

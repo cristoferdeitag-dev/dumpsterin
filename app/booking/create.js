@@ -1154,12 +1154,12 @@ export default function CreateBooking() {
 
             {/* Book Direct */}
             <TouchableOpacity
-              style={[s.submitBtn, { backgroundColor: '#353535', marginTop: 4 }]}
+              style={[s.submitBtn, { backgroundColor: '#E8E8E8', marginTop: 4 }]}
               onPress={handleBookDirect}
               activeOpacity={0.85}
             >
-              <Ionicons name="add-circle" size={20} color="#e5e2e1" />
-              <Text style={[s.submitBtnText, { color: '#e5e2e1' }]}>Book Direct</Text>
+              <Ionicons name="add-circle" size={20} color="#1A1A1A" />
+              <Text style={[s.submitBtnText, { color: '#1A1A1A' }]}>Book Direct</Text>
             </TouchableOpacity>
             <Text style={{ textAlign: 'center', fontSize: 11, color: textMuted, marginTop: -6 }}>
               Creates booking immediately (client already paid)
