@@ -129,8 +129,12 @@ export default function MapScreen() {
 
   const deployedDumpsters = (state.dumpsters || []).filter(d => d.status === 'deployed');
 
-  const getBookingForDumpster = (dumpsterId) =>
-    (state.bookings || []).find(b => b.assignedDumpster === dumpsterId);
+  const getBookingForDumpster = (dumpster) =>
+    (state.bookings || []).find(b =>
+      b.assignedDumpster === dumpster.id ||
+      b.assignedDumpster === dumpster._dbId ||
+      b.assignedDumpster === dumpster.label
+    );
 
   // Load Google Maps script
   useEffect(() => {
@@ -197,7 +201,7 @@ export default function MapScreen() {
     bounds.extend({ lat: TP_BASE.lat, lng: TP_BASE.lng });
 
     deployedDumpsters.forEach((d) => {
-      const booking = getBookingForDumpster(d.id);
+      const booking = getBookingForDumpster(d);
       if (!booking || !booking.deliveryAddress) return;
 
       geocoder.geocode({ address: booking.deliveryAddress }, (results, status) => {
@@ -331,7 +335,7 @@ export default function MapScreen() {
             </View>
           ) : (
             deployedDumpsters.map((d) => {
-              const booking = getBookingForDumpster(d.id);
+              const booking = getBookingForDumpster(d);
               const isSelected = selectedDumpster === d.id;
               return (
                 <TouchableOpacity
