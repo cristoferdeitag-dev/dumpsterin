@@ -17,6 +17,8 @@ export default function RootLayout() {
         <Stack.Screen name="booking/[id]" options={{ presentation: 'card' }} />
         <Stack.Screen name="booking/create" options={{ presentation: 'card' }} />
         <Stack.Screen name="booking/edit" options={{ presentation: 'card' }} />
+        <Stack.Screen name="driver" options={{ presentation: 'card' }} />
+        <Stack.Screen name="revenue" options={{ presentation: 'card' }} />
       </Stack>
     </AppProvider>
   );
