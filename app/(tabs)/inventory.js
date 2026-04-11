@@ -59,7 +59,14 @@ export default function InventoryScreen() {
       else if (d.status === 'deployed') deployed++;
       else if (d.status === 'maintenance') maintenance++;
     });
-    return { available, deployed, maintenance };
+    // Breakdown by size
+    const sizes = {};
+    ['10yd', '20yd', '30yd'].forEach((size) => {
+      const all = state.dumpsters.filter((d) => d.size === size);
+      const avail = all.filter((d) => d.status === 'available');
+      sizes[size] = { total: all.length, available: avail.length };
+    });
+    return { available, deployed, maintenance, sizes };
   }, [state.dumpsters]);
 
   const filteredDumpsters = useMemo(() => {
@@ -171,7 +178,7 @@ export default function InventoryScreen() {
         <View style={{ flexDirection: 'row', gap: 4, padding: 4, backgroundColor: COLORS.surface_container_lowest, borderRadius: 9999 }}>
           {['available', 'deployed', 'maintenance'].map((s) => {
             const isActive = dumpster.status === s;
-            const label = s === 'available' ? 'Available' : s === 'deployed' ? 'Deployed' : 'Service';
+            const label = s === 'available' ? 'Available' : s === 'deployed' ? 'Delivered' : 'Service';
             let bgColor = 'transparent';
             let textColor = COLORS.on_surface_variant;
             if (isActive) {
@@ -218,11 +225,11 @@ export default function InventoryScreen() {
                 <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 16 }}>{counts.available}</Text>
                 <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Available</Text>
               </View>
-              {/* Deployed */}
+              {/* Delivered */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
                 <Text style={{ fontSize: 16, color: COLORS.tertiary }}>{'\u{1F69B}'}</Text>
                 <Text style={{ color: COLORS.tertiary, fontWeight: '700', fontSize: 16 }}>{counts.deployed}</Text>
-                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Deployed</Text>
+                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Delivered</Text>
               </View>
               {/* Maintenance */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
@@ -230,6 +237,27 @@ export default function InventoryScreen() {
                 <Text style={{ color: COLORS.error, fontWeight: '700', fontSize: 16 }}>{counts.maintenance}</Text>
                 <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Maintenance</Text>
               </View>
+            </View>
+
+            {/* Size Breakdown */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+              {['10yd', '20yd', '30yd'].map((size) => {
+                const s = counts.sizes[size] || { total: 0, available: 0 };
+                const label = size.replace('yd', ' Yard');
+                return (
+                  <View key={size} style={{ flex: 1, backgroundColor: COLORS.surface_container_low, borderRadius: 12, padding: 14, alignItems: 'center' }}>
+                    <Text style={{ color: COLORS.on_surface, fontWeight: '800', fontSize: 22, letterSpacing: -0.5 }}>
+                      {s.available}/{s.total}
+                    </Text>
+                    <Text style={{ color: COLORS.on_surface_variant, fontSize: 10, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginTop: 4 }}>
+                      {label}
+                    </Text>
+                    <View style={{ width: '100%', height: 4, backgroundColor: COLORS.surface_container_lowest, borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                      <View style={{ width: s.total > 0 ? `${(s.available / s.total) * 100}%` : '0%', height: '100%', backgroundColor: s.available > 0 ? COLORS.primary : COLORS.error, borderRadius: 2 }} />
+                    </View>
+                  </View>
+                );
+              })}
             </View>
 
             {/* Search */}
