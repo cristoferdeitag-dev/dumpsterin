@@ -264,20 +264,12 @@ export default function MapScreen() {
         <Text style={styles.title}>Fleet Map</Text>
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#ff8c00' }]} />
             <Text style={styles.legendText}>HQ</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#85cfff' }]} />
             <Text style={styles.legendText}>Delivered</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.info }]} />
-            <Text style={styles.legendText}>Scheduled</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
-            <Text style={styles.legendText}>In Transit</Text>
           </View>
         </View>
       </View>

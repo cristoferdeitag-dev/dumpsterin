@@ -310,37 +310,50 @@ export default function EditBooking() {
           </View>
         </ScrollView>
 
-        {/* Dumpster Size */}
+        {/* Service Type */}
         <Text style={styles.label}>
-          Dumpster Size <Text style={styles.required}>*</Text>
+          Service Type <Text style={styles.required}>*</Text>
         </Text>
         <View style={styles.pillRow}>
-          {DUMPSTER_SIZES.map((s) =>
+          {SERVICE_TYPES.map((t) =>
             renderPill(
-              `${s.label} — $${s.basePrice}`,
-              dumpsterSize === s.id,
+              `${t.icon} ${t.label}`,
+              serviceType === t.label || serviceType === t.id,
               () => {
-                setDumpsterSize(s.id);
-                if (s.id !== dumpsterSize) {
+                setServiceType(t.label);
+                if (!t.sizes.includes(dumpsterSize)) {
+                  setDumpsterSize('');
                   setDumpsterId('');
-                  setBasePrice(String(s.basePrice));
                 }
               }
             )
           )}
         </View>
 
-        {/* Service Type */}
+        {/* Dumpster Size — filtered by service */}
         <Text style={styles.label}>
-          Service Type <Text style={styles.required}>*</Text>
+          Dumpster Size <Text style={styles.required}>*</Text>
         </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-          <View style={styles.pillRow}>
-            {SERVICE_TYPES.map((t) =>
-              renderPill(t, serviceType === t, () => setServiceType(t))
-            )}
-          </View>
-        </ScrollView>
+        <View style={styles.pillRow}>
+          {(() => {
+            const selectedSvc = SERVICE_TYPES.find(t => t.label === serviceType || t.id === serviceType);
+            const allowedSizes = selectedSvc ? selectedSvc.sizes : ['10yd', '20yd', '30yd'];
+            return DUMPSTER_SIZES.filter(s => allowedSizes.includes(s.id)).map((s) => {
+              const price = (selectedSvc?.priceOverride?.[s.id]) || s.basePrice;
+              return renderPill(
+                `${s.label} — $${price}`,
+                dumpsterSize === s.id,
+                () => {
+                  setDumpsterSize(s.id);
+                  if (s.id !== dumpsterSize) {
+                    setDumpsterId('');
+                    setBasePrice(String(price));
+                  }
+                }
+              );
+            });
+          })()}
+        </View>
 
         {/* Material */}
         <Text style={styles.label}>
