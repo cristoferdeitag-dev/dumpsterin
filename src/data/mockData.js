@@ -269,7 +269,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Booking ID: TP-MNMGG8MV',
     source: 'website',
-    generatedBy: 'website',
+    generatedBy: 'asai',
     createdAt: '2026-04-07',
   },
   // 8. Brian Tsang — 20yd, delivery Apr 8 7:30AM, pickup Apr 15 9:30AM
@@ -294,7 +294,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Booking ID: TP-MNOSDOLD. Pickup scheduled Apr 15 9:30AM.',
     source: 'website',
-    generatedBy: 'website',
+    generatedBy: 'asai',
     createdAt: '2026-04-08',
   },
   // 9. Deborah Willow Oak Ranch — 30yd, delivery Apr 8 9AM, pickup Apr 15 7:30AM
@@ -319,7 +319,7 @@ export const initialBookings = [
     assignedDriver: null,
     notes: 'Booking ID: TP-MNOWX6TP. Pickup scheduled Apr 15 7:30AM.',
     source: 'website',
-    generatedBy: 'website',
+    generatedBy: 'asai',
     createdAt: '2026-04-08',
   },
   // 10. Trenor — 30yd, delivery Apr 8 10:30AM, swaps Apr 9/10/11, pickup Apr 15 10:30AM
