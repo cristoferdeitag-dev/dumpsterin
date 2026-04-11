@@ -1269,7 +1269,7 @@ const s = StyleSheet.create({
 
   // Inputs
   input: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: border,
@@ -1281,11 +1281,11 @@ const s = StyleSheet.create({
   },
   inputFocused: {
     borderColor: primary,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#FFFFFF',
   },
   inputFilled: {
-    borderColor: '#444444',
-    backgroundColor: '#1E1E1E',
+    borderColor: '#333333',
+    backgroundColor: '#FFFFFF',
   },
   multiline: {
     minHeight: 88,
@@ -1374,7 +1374,7 @@ const s = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1.5,
     borderColor: textMuted,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1411,7 +1411,7 @@ const s = StyleSheet.create({
   dateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: border,
@@ -1420,7 +1420,7 @@ const s = StyleSheet.create({
     gap: 10,
   },
   dateBtnFilled: {
-    borderColor: '#444444',
+    borderColor: '#333333',
   },
   dateBtnText: {
     flex: 1,
@@ -1525,7 +1525,7 @@ const s = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1.5,
     borderColor: textMuted,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1554,7 +1554,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   qtyInput: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: border,
