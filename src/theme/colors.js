@@ -24,11 +24,13 @@ export const textMuted = '#999999';
 
 // Booking statuses
 export const status = {
+  quote_sent: '#999999',
   scheduled: '#60a5fa',
   in_transit: '#ffb77d',
-  delivered: '#999999',
-  pickup_ready: '#00b5fc',
+  on_site: '#00C853',
+  ready_for_pickup: '#00b5fc',
   picked_up: '#85cfff',
+  dumping: '#FF8C00',
   completed: '#999999',
   cancelled: '#ffb4ab',
 };

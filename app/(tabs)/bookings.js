@@ -5,11 +5,13 @@ import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 
 const STATUS_COLORS = {
+  quote_sent: '#999999',
   scheduled: '#60a5fa',
   in_transit: '#ffb77d',
-  delivered: '#999999',
-  pickup_ready: '#00b5fc',
+  on_site: '#00C853',
+  ready_for_pickup: '#00b5fc',
   picked_up: '#85cfff',
+  dumping: '#FF8C00',
   completed: '#999999',
   cancelled: '#ffb4ab',
 };
@@ -24,10 +26,10 @@ const DETAIL_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'scheduled', label: 'Scheduled' },
   { id: 'in_transit', label: 'In Transit' },
-  { id: 'delivered', label: 'Delivered' },
-  { id: 'pickup_ready', label: 'Pickup' },
+  { id: 'on_site', label: 'On Site' },
+  { id: 'ready_for_pickup', label: 'Ready' },
+  { id: 'picked_up', label: 'Picked Up' },
   { id: 'completed', label: 'Completed' },
-  { id: 'cancelled', label: 'Cancelled' },
 ];
 
 export default function BookingsScreen() {

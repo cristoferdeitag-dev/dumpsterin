@@ -35,10 +35,17 @@ export const SPECIAL_ITEM_FEES = [
 ];
 
 export const DELIVERY_WINDOWS = [
-  { id: 'morning', label: 'Morning (7AM-11AM)' },
-  { id: 'midday', label: 'Midday (11AM-3PM)' },
-  { id: 'afternoon', label: 'Afternoon (3PM-6PM)' },
-  { id: 'sameday', label: 'Same-Day (ASAP)' },
+  { id: '7-8', label: '7:00 - 8:00 AM' },
+  { id: '8-9', label: '8:00 - 9:00 AM' },
+  { id: '9-10', label: '9:00 - 10:00 AM' },
+  { id: '10-11', label: '10:00 - 11:00 AM' },
+  { id: '11-12', label: '11:00 AM - 12:00 PM' },
+  { id: '12-13', label: '12:00 - 1:00 PM' },
+  { id: '13-14', label: '1:00 - 2:00 PM' },
+  { id: '14-15', label: '2:00 - 3:00 PM' },
+  { id: '15-16', label: '3:00 - 4:00 PM' },
+  { id: '16-17', label: '4:00 - 5:00 PM' },
+  { id: '17-18', label: '5:00 - 6:00 PM' },
 ];
 
 // 4 simplified service types
@@ -285,7 +292,7 @@ export const initialBookings = [
     deliveryDate: '2026-04-08',
     deliveryWindow: 'morning',
     pickupDate: '2026-04-15',
-    status: 'delivered',
+    status: 'on_site',
     basePrice: 616.55,
     discount: 0,
     specialItems: [],
@@ -310,7 +317,7 @@ export const initialBookings = [
     deliveryDate: '2026-04-08',
     deliveryWindow: 'morning',
     pickupDate: '2026-04-15',
-    status: 'delivered',
+    status: 'on_site',
     basePrice: 711.55,
     discount: 0,
     specialItems: [],
@@ -335,7 +342,7 @@ export const initialBookings = [
     deliveryDate: '2026-04-08',
     deliveryWindow: 'morning',
     pickupDate: '2026-04-15',
-    status: 'delivered',
+    status: 'on_site',
     basePrice: 750,
     discount: 0,
     specialItems: [],
@@ -410,7 +417,7 @@ export const initialBookings = [
     deliveryDate: '2026-04-10',
     deliveryWindow: 'morning',
     pickupDate: null,
-    status: 'delivered',
+    status: 'on_site',
     basePrice: 650,
     discount: 0,
     specialItems: [],
@@ -435,7 +442,7 @@ export const initialBookings = [
     deliveryDate: '2026-04-07',
     deliveryWindow: 'morning',
     pickupDate: '2026-04-14',
-    status: 'delivered',
+    status: 'on_site',
     basePrice: 897,
     discount: 0,
     specialItems: [],
@@ -460,7 +467,7 @@ export const initialBookings = [
     deliveryDate: '2026-04-09',
     deliveryWindow: 'midday',
     pickupDate: '2026-04-16',
-    status: 'delivered',
+    status: 'on_site',
     basePrice: 699,
     discount: 0,
     specialItems: [],
@@ -485,7 +492,7 @@ export const initialBookings = [
     deliveryDate: '2026-04-09',
     deliveryWindow: 'afternoon',
     pickupDate: '2026-04-16',
-    status: 'delivered',
+    status: 'on_site',
     basePrice: 650,
     discount: 0,
     specialItems: [],
@@ -579,11 +586,15 @@ export const BOOKING_STATUSES = [
   { id: 'quote_sent', label: 'Quote Sent', icon: 'send' },
   { id: 'scheduled', label: 'Scheduled', icon: 'calendar' },
   { id: 'in_transit', label: 'In Transit', icon: 'truck-delivery' },
-  { id: 'delivered', label: 'Delivered', icon: 'package-variant' },
-  { id: 'pickup_ready', label: 'Pickup Ready', icon: 'phone-ring' },
+  { id: 'on_site', label: 'On Site', icon: 'package-variant' },
+  { id: 'ready_for_pickup', label: 'Ready for Pickup', icon: 'phone-ring' },
   { id: 'picked_up', label: 'Picked Up', icon: 'truck' },
+  { id: 'dumping', label: 'Dumping', icon: 'delete' },
   { id: 'completed', label: 'Completed', icon: 'check-circle' },
   { id: 'cancelled', label: 'Cancelled', icon: 'close-circle' },
 ];
 
-export const DUMPSTER_STATUSES = ['available', 'deployed', 'maintenance'];
+export const DUMPSTER_STATUSES = ['on_yard', 'in_transit', 'on_site', 'ready_for_pickup', 'picked_up', 'dumping'];
+
+export const TP_YARD_ADDRESS = '150 Brookside Dr, Richmond, CA 94801';
+export const DUMP_STATION = 'Devlin Road Transfer Station, Pittsburg, CA';

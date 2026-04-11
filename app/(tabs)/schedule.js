@@ -40,10 +40,10 @@ const HOURS = [
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const WINDOW_TO_HOUR = {
-  morning: 7,
-  midday: 11,
-  afternoon: 15,
-  sameday: 9,
+  '7-8': 7, '8-9': 8, '9-10': 9, '10-11': 10, '11-12': 11,
+  '12-13': 12, '13-14': 13, '14-15': 14, '15-16': 15, '16-17': 16, '17-18': 17,
+  // Legacy mappings
+  morning: 7, midday: 11, afternoon: 15, sameday: 9,
 };
 
 function getWeekDays(offset = 0) {
@@ -76,8 +76,13 @@ function isSameDay(d1, d2) {
 }
 
 function getStatusColor(status) {
-  if (status === 'in_transit') return COLORS.tertiary;
-  return COLORS.primary;
+  const colors = {
+    scheduled: COLORS.primary, in_transit: COLORS.tertiary,
+    on_site: '#00C853', ready_for_pickup: '#00b5fc',
+    picked_up: '#85cfff', dumping: '#FF8C00',
+    completed: '#999999', cancelled: '#ffb4ab',
+  };
+  return colors[status] || COLORS.primary;
 }
 
 export default function ScheduleScreen() {

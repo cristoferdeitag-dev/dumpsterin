@@ -34,7 +34,7 @@ import {
   status as statusColors,
 } from '../../src/theme/colors';
 
-const STATUS_FLOW = ['scheduled', 'in_transit', 'delivered', 'pickup_ready', 'picked_up', 'completed'];
+const STATUS_FLOW = ['scheduled', 'in_transit', 'on_site', 'ready_for_pickup', 'picked_up', 'dumping', 'completed'];
 
 export default function BookingDetail() {
   const router = useRouter();
