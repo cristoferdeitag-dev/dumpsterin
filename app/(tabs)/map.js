@@ -73,16 +73,27 @@ export default function MapScreen() {
 
     // Geocode the ZIP
     const geocoder = new window.google.maps.Geocoder();
-    geocoder.geocode({ address: zipCode + ', CA, USA' }, (results, status) => {
+    geocoder.geocode({ address: zipCode + ', USA' }, (results, status) => {
       if (status !== 'OK' || !results[0]) return;
       const pos = results[0].geometry.location;
       const map = mapInstanceRef.current;
+
+      // Extract city name from geocode result
+      let geoCity = '';
+      const components = results[0].address_components || [];
+      for (const comp of components) {
+        if (comp.types.includes('locality')) { geoCity = comp.long_name; break; }
+        if (comp.types.includes('sublocality')) { geoCity = comp.long_name; }
+        if (!geoCity && comp.types.includes('administrative_area_level_2')) { geoCity = comp.long_name; }
+      }
+      const displayCity = city || geoCity || 'Unknown';
+      setZipResult(city ? city : (geoCity ? '!' + geoCity : false));
 
       // Draw circle
       zipCircleRef.current = new window.google.maps.Circle({
         map,
         center: pos,
-        radius: 3000, // 3km radius
+        radius: 3000,
         fillColor: city ? '#85cfff' : '#ff5252',
         fillOpacity: 0.15,
         strokeColor: city ? '#85cfff' : '#ff5252',
@@ -94,7 +105,7 @@ export default function MapScreen() {
       zipMarkerRef.current = new window.google.maps.Marker({
         position: pos,
         map,
-        title: city ? `${zipCode} — ${city} (Service Area)` : `${zipCode} — Outside Service Area`,
+        title: `${zipCode} — ${displayCity}`,
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: 8,
@@ -106,8 +117,8 @@ export default function MapScreen() {
       });
 
       const infoContent = city
-        ? `<div style="font-family:system-ui;padding:4px"><b style="color:#00b5fc">${zipCode} — ${city}, CA</b><br/><span style="color:green">✅ We service this area!</span></div>`
-        : `<div style="font-family:system-ui;padding:4px"><b>${zipCode}</b><br/><span style="color:red">❌ Outside service area</span></div>`;
+        ? `<div style="font-family:system-ui;padding:4px"><b style="color:#00b5fc">${zipCode} — ${displayCity}, CA</b><br/><span style="color:green">✅ We service this area!</span></div>`
+        : `<div style="font-family:system-ui;padding:4px"><b>${zipCode} — ${displayCity}</b><br/><span style="color:red">❌ Outside service area</span></div>`;
       const infoWindow = new window.google.maps.InfoWindow({ content: infoContent });
       infoWindow.open(map, zipMarkerRef.current);
 
@@ -294,10 +305,16 @@ export default function MapScreen() {
             <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 13 }}>Check</Text>
           </TouchableOpacity>
         </View>
-        {typeof zipResult === 'string' && (
+        {typeof zipResult === 'string' && !zipResult.startsWith('!') && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
             <Ionicons name="checkmark-circle" size={16} color="#85cfff" />
             <Text style={{ color: '#85cfff', fontWeight: '700', fontSize: 12 }}>{zipCode} — {zipResult}, CA — We service this area!</Text>
+          </View>
+        )}
+        {typeof zipResult === 'string' && zipResult.startsWith('!') && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <Ionicons name="close-circle" size={16} color="#ffb4ab" />
+            <Text style={{ color: '#ffb4ab', fontWeight: '700', fontSize: 12 }}>{zipCode} — {zipResult.slice(1)} — Outside service area</Text>
           </View>
         )}
         {zipResult === false && (
@@ -376,7 +393,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
-    minHeight: 350,
+    minHeight: 300,
+    maxHeight: 450,
   },
   mapFallback: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
