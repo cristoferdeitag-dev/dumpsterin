@@ -75,6 +75,13 @@ export async function deleteBooking(id) {
 // Dumpster UUID → Label lookup cache
 let _dumpsterLabelMap = {};
 
+// GeneratedBy lookup (until we add the column to Supabase)
+const _generatedByMap = {
+  'CAL-20260410-VILLATORO': 'tiago',
+  'CAL-20260413-KINGDOM': 'tiago',
+  // All others default to 'asai'
+};
+
 // ── DUMPSTERS ──
 export async function fetchDumpsters() {
   const companyId = await getCompanyId();
@@ -160,7 +167,7 @@ function mapBookingFromDB(b) {
     assignedDriver: b.driver_id || null,
     notes: b.notes || '',
     source: b.source || 'phone',
-    generatedBy: b.source || 'phone',
+    generatedBy: _generatedByMap[b.booking_number] || 'asai',
     createdAt: b.created_at ? b.created_at.split('T')[0] : '',
     // DB-specific fields
     _dbId: b.id,
