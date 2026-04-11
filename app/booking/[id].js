@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   SafeAreaView,
   Alert,
   Linking,
+  Modal,
 } from 'react-native';
+import { bgInput } from '../../src/theme/colors';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
@@ -89,6 +92,68 @@ export default function BookingDetail() {
         onPress: () => handleStatusChange('cancelled'),
       },
     ]);
+  };
+
+  // Extra Charge state
+  const [showExtraCharge, setShowExtraCharge] = useState(false);
+  const [chargeType, setChargeType] = useState('');
+  const [chargeAmount, setChargeAmount] = useState('');
+  const [chargeQty, setChargeQty] = useState('1');
+  const [chargingExtra, setChargingExtra] = useState(false);
+
+  const EXTRA_CHARGE_TYPES = [
+    { id: 'overweight', label: 'Overweight', unit: 'ton', rate: 125 },
+    { id: 'extra_days', label: 'Extra Days', unit: 'day', rate: 49 },
+    { id: 'mattress', label: 'Mattress', unit: 'each', rate: 35 },
+    { id: 'tires', label: 'Tires', unit: 'each', rate: 30 },
+    { id: 'appliance', label: 'Appliance', unit: 'each', rate: 60 },
+    { id: 'custom', label: 'Custom', unit: '', rate: 0 },
+  ];
+
+  const handleExtraCharge = async (method) => {
+    const type = EXTRA_CHARGE_TYPES.find(t => t.id === chargeType);
+    if (!type) return Alert.alert('Error', 'Select charge type');
+    const qty = parseFloat(chargeQty) || 1;
+    const amount = type.id === 'custom' ? (parseFloat(chargeAmount) || 0) : type.rate * qty;
+    if (amount <= 0) return Alert.alert('Error', 'Amount must be greater than 0');
+
+    setChargingExtra(true);
+    try {
+      const res = await fetch('https://dumpsterin.com/api/extra-charge.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerEmail: booking.email,
+          customerName: booking.customerName,
+          phone: booking.phone,
+          bookingId: booking.id,
+          chargeType: type.label,
+          amount,
+          qty,
+          description: `${type.label}${type.id !== 'custom' ? ` x${qty}` : ''} — Booking ${booking.id}`,
+          method, // 'auto' or 'invoice'
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowExtraCharge(false);
+        setChargeType('');
+        setChargeAmount('');
+        setChargeQty('1');
+        Alert.alert(
+          'Charge ' + (method === 'auto' ? 'Processed' : 'Sent'),
+          method === 'auto'
+            ? `$${amount.toFixed(2)} charged to card on file.`
+            : `Invoice for $${amount.toFixed(2)} sent to ${booking.email || booking.phone}.`
+        );
+      } else {
+        Alert.alert('Error', data.error || 'Failed to process charge');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Connection failed');
+    } finally {
+      setChargingExtra(false);
+    }
   };
 
   const getStatusColor = (s) => statusColors[s] || textMuted;
@@ -324,6 +389,117 @@ export default function BookingDetail() {
           </View>
         </View>
 
+        {/* Extra Charge Button */}
+        {booking.status !== 'cancelled' && (
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#ff8c00', marginHorizontal: 16, marginBottom: 12 }]}
+            onPress={() => setShowExtraCharge(true)}
+          >
+            <Ionicons name="cash-outline" size={20} color="#4d2600" />
+            <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 15, marginLeft: 8 }}>Add Extra Charge</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Extra Charge Modal */}
+        <Modal visible={showExtraCharge} transparent animationType="fade">
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowExtraCharge(false)}>
+            <View style={styles.extraChargeModal} onStartShouldSetResponder={() => true}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: textColor, marginBottom: 16 }}>Extra Charge</Text>
+              <Text style={{ fontSize: 12, color: textSecondary, marginBottom: 12 }}>For: {booking.customerName}</Text>
+
+              {/* Charge Type Pills */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {EXTRA_CHARGE_TYPES.map(t => (
+                  <TouchableOpacity
+                    key={t.id}
+                    onPress={() => { setChargeType(t.id); if (t.rate) setChargeAmount(String(t.rate)); }}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
+                      backgroundColor: chargeType === t.id ? 'rgba(255,140,0,0.2)' : bgElevated,
+                      borderWidth: chargeType === t.id ? 1 : 0,
+                      borderColor: '#ff8c00',
+                    }}
+                  >
+                    <Text style={{ color: chargeType === t.id ? '#ffb77d' : textSecondary, fontSize: 13, fontWeight: '600' }}>
+                      {t.label}{t.rate ? ` ($${t.rate})` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Quantity */}
+              {chargeType && chargeType !== 'custom' && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={{ fontSize: 12, color: textSecondary, fontWeight: '600', marginBottom: 6 }}>QUANTITY</Text>
+                  <TextInput
+                    style={{ backgroundColor: bgInput, borderRadius: 10, padding: 12, color: textColor, fontSize: 16 }}
+                    value={chargeQty}
+                    onChangeText={setChargeQty}
+                    keyboardType="numeric"
+                    placeholder="1"
+                    placeholderTextColor={textMuted}
+                  />
+                </View>
+              )}
+
+              {/* Custom Amount */}
+              {chargeType === 'custom' && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={{ fontSize: 12, color: textSecondary, fontWeight: '600', marginBottom: 6 }}>AMOUNT ($)</Text>
+                  <TextInput
+                    style={{ backgroundColor: bgInput, borderRadius: 10, padding: 12, color: textColor, fontSize: 16 }}
+                    value={chargeAmount}
+                    onChangeText={setChargeAmount}
+                    keyboardType="numeric"
+                    placeholder="0.00"
+                    placeholderTextColor={textMuted}
+                  />
+                </View>
+              )}
+
+              {/* Total Preview */}
+              {chargeType && (
+                <View style={{ backgroundColor: bgElevated, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                  <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 1 }}>CHARGE AMOUNT</Text>
+                  <Text style={{ color: '#ffb77d', fontSize: 28, fontWeight: '800', marginTop: 4 }}>
+                    ${chargeType === 'custom'
+                      ? (parseFloat(chargeAmount) || 0).toFixed(2)
+                      : ((EXTRA_CHARGE_TYPES.find(t => t.id === chargeType)?.rate || 0) * (parseFloat(chargeQty) || 1)).toFixed(2)
+                    }
+                  </Text>
+                </View>
+              )}
+
+              {/* Action Buttons */}
+              <View style={{ gap: 10 }}>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#ff8c00', paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  onPress={() => handleExtraCharge('auto')}
+                  disabled={chargingExtra}
+                >
+                  <Ionicons name="card" size={18} color="#4d2600" />
+                  <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 15 }}>
+                    {chargingExtra ? 'Processing...' : 'Charge Card on File'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ backgroundColor: bgElevated, paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  onPress={() => handleExtraCharge('invoice')}
+                  disabled={chargingExtra}
+                >
+                  <Ionicons name="send" size={18} color={textSecondary} />
+                  <Text style={{ color: textSecondary, fontWeight: '700', fontSize: 15 }}>Send Invoice Instead</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={{ fontSize: 10, color: textMuted, textAlign: 'center', marginTop: 10 }}>
+                {booking.email ? `Card check: ${booking.email}` : 'No email — invoice will use SMS'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
         {/* Action Buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
@@ -552,5 +728,19 @@ const styles = StyleSheet.create({
     color: textMuted,
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  extraChargeModal: {
+    backgroundColor: bgCard,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
   },
 });
