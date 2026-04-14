@@ -6,6 +6,8 @@ import {
   updateBookingStatus as sbUpdateStatus,
   deleteBooking as sbDeleteBooking,
   updateDumpsterStatus as sbUpdateDumpster,
+  markReviewRequested as sbMarkReviewRequested,
+  bulkMarkReviewsRequestedBefore as sbBulkMarkReviewsBefore,
 } from '../lib/supabase';
 
 const AppContext = createContext();
@@ -76,6 +78,30 @@ function appReducer(state, action) {
         ...state,
         bookings: state.bookings.filter(b => b.id !== action.payload),
         dumpsters,
+      };
+    }
+    case 'MARK_REVIEW_REQUESTED': {
+      const { id, timestamp } = action.payload;
+      sbMarkReviewRequested(id, timestamp).catch(() => {});
+      return {
+        ...state,
+        bookings: state.bookings.map(b =>
+          b.id === id ? { ...b, reviewRequestedAt: timestamp } : b
+        ),
+      };
+    }
+    case 'BULK_MARK_REVIEWS_BEFORE': {
+      const { isoDate } = action.payload;
+      sbBulkMarkReviewsBefore(isoDate).catch(() => {});
+      const now = new Date().toISOString();
+      return {
+        ...state,
+        bookings: state.bookings.map(b => {
+          if (b.reviewRequestedAt) return b;
+          if (!['on_site', 'completed', 'picked_up', 'ready_for_pickup'].includes(b.status)) return b;
+          if ((b.deliveryDate || '') > isoDate) return b;
+          return { ...b, reviewRequestedAt: now };
+        }),
       };
     }
     case 'UPDATE_DUMPSTER': {

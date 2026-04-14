@@ -64,6 +64,28 @@ export async function updateBookingStatus(id, status) {
   if (error) console.error('updateBookingStatus error:', error);
 }
 
+export async function markReviewRequested(id, timestamp) {
+  const { error } = await supabase
+    .from('bookings')
+    .update({ review_requested_at: timestamp })
+    .eq('id', id);
+  if (error) console.error('markReviewRequested error:', error);
+}
+
+export async function bulkMarkReviewsRequestedBefore(isoDate) {
+  const companyId = await getCompanyId();
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({ review_requested_at: new Date().toISOString() })
+    .eq('company_id', companyId)
+    .lte('scheduled_date', isoDate)
+    .is('review_requested_at', null)
+    .in('status', ['delivered', 'completed', 'picked_up', 'pickup_ready'])
+    .select('id');
+  if (error) { console.error('bulkMarkReviewsRequestedBefore error:', error); return 0; }
+  return (data || []).length;
+}
+
 export async function deleteBooking(id) {
   const { error } = await supabase
     .from('bookings')
@@ -168,6 +190,7 @@ function mapBookingFromDB(b) {
     notes: b.notes || '',
     source: b.source || 'phone',
     generatedBy: _generatedByMap[b.booking_number] || 'asai',
+    reviewRequestedAt: b.review_requested_at || null,
     createdAt: b.created_at ? b.created_at.split('T')[0] : '',
     // DB-specific fields
     _dbId: b.id,

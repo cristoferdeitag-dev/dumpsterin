@@ -427,6 +427,50 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Pending Reviews Card */}
+        <TouchableOpacity
+          onPress={() => router.push('/pending-reviews')}
+          activeOpacity={0.85}
+          style={{
+            backgroundColor: '#F7F7F7',
+            borderRadius: 12,
+            padding: 20,
+            marginBottom: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
+          <View style={{
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            backgroundColor: '#ffb77d',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 14,
+          }}>
+            <Ionicons name="star-outline" size={22} color="#4d2600" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#1A1A1A', fontSize: 15, fontWeight: '800', letterSpacing: -0.3 }}>
+              Pending Reviews
+            </Text>
+            <Text style={{ color: '#666666', fontSize: 12, marginTop: 2 }}>
+              {(() => {
+                const count = (state.bookings || []).filter(
+                  (b) =>
+                    ['on_site', 'completed', 'picked_up', 'ready_for_pickup', 'dumping'].includes(b.status) &&
+                    !b.reviewRequestedAt
+                ).length;
+                return count === 0
+                  ? 'All caught up 🎉'
+                  : `${count} customer${count === 1 ? '' : 's'} to ask for a review`;
+              })()}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#999" />
+        </TouchableOpacity>
+
         {/* Recent Bookings */}
         <View style={{ marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>
