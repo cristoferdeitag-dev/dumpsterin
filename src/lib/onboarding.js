@@ -105,6 +105,27 @@ export async function createCompanyWithSetup(data) {
     }
   }
 
+  // 5) Associate current auth user as admin/owner of this company
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    const userId = session.user.id;
+    const userEmail = session.user.email;
+    const userName = session.user.user_metadata?.full_name || userEmail?.split('@')[0] || 'Admin';
+
+    // Create or update profile
+    const { error: profErr } = await supabase
+      .from('profiles')
+      .upsert({
+        id: userId,
+        company_id: companyId,
+        full_name: userName,
+        email: userEmail,
+        role: 'admin',
+        is_active: true,
+      });
+    if (profErr) console.error('Profile upsert warning:', profErr.message);
+  }
+
   return { company };
 }
 

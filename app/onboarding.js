@@ -13,6 +13,7 @@ import {
   SERVICE_OPTIONS,
   DEFAULT_POLICIES,
 } from '../src/lib/onboarding';
+import { useAuth } from '../src/context/AuthContext';
 
 const C = {
   bg: '#FFFFFF',
@@ -40,6 +41,7 @@ const STEPS = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { refreshProfile } = useAuth();
   const [stepIdx, setStepIdx] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -139,6 +141,8 @@ export default function OnboardingScreen() {
     if (result.error) {
       Alert.alert('Error', result.error);
     } else {
+      // Refresh auth profile so companyId gets loaded
+      await refreshProfile();
       Alert.alert('¡Listo!', `Tu empresa "${result.company.name}" quedó registrada. Bienvenido a Dumpsterin.`, [
         { text: 'Ir al dashboard', onPress: () => router.replace('/(tabs)') },
       ]);

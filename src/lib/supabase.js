@@ -3,21 +3,31 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://mbirzaocjkhqydtuqmze.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1iaXJ6YW9jamtocXlkdHVxbXplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NjkxNTUsImV4cCI6MjA5MTE0NTE1NX0.-ERkDAXi5YOsy-CdmEEMKDUgpXQQcgJt0HY0b7t2SuA';
 
-// TP Dumpsters company ID (first and only company for now)
-export const TP_COMPANY_ID = null; // Will be set after first fetch
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Fetch company ID on init
+// Company ID viene del profile del usuario autenticado.
+// Lo obtenemos de la sesión activa — si no hay sesión, devolvemos null.
 let _companyId = null;
+export function setAuthCompanyId(id) {
+  _companyId = id;
+}
 export async function getCompanyId() {
   if (_companyId) return _companyId;
+  // Fallback: lookup del profile del usuario autenticado
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
   const { data } = await supabase
-    .from('companies')
-    .select('id')
-    .eq('slug', 'tp-dumpsters')
-    .single();
-  _companyId = data?.id || null;
+    .from('profiles')
+    .select('company_id')
+    .eq('id', session.user.id)
+    .maybeSingle();
+  _companyId = data?.company_id || null;
   return _companyId;
 }
 
