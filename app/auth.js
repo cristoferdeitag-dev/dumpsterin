@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
+import { supabase } from '../src/lib/supabase';
 
 const C = {
   bg: '#FFFFFF',
@@ -46,19 +47,27 @@ export default function AuthScreen() {
         const { error } = await signIn({ email, password });
         if (error) {
           Alert.alert('Error al iniciar sesión', error.message);
-        } else {
-          router.replace('/(tabs)');
+          setLoading(false);
+          return;
         }
+        // Don't navigate manually — RouteGuard will route based on auth state
       } else {
         const { user, error } = await signUp({ email, password, fullName });
         if (error) {
           Alert.alert('Error al crear cuenta', error.message);
-        } else if (user) {
-          // After signup, redirect to onboarding to create their company
-          router.replace('/onboarding');
+          setLoading(false);
+          return;
+        }
+        // Auto-confirm is on, so session is set. RouteGuard will push to /onboarding
+        // Fallback: if for some reason no session yet, attempt signIn
+        if (!user) {
+          await signIn({ email, password });
         }
       }
-    } finally {
+      // Keep loading=true; RouteGuard will transition us. Fallback in 3s if not.
+      setTimeout(() => setLoading(false), 3000);
+    } catch (e) {
+      Alert.alert('Error inesperado', e.message || 'Intenta de nuevo');
       setLoading(false);
     }
   };
@@ -95,7 +104,7 @@ export default function AuthScreen() {
                   style={styles.input}
                   value={fullName}
                   onChangeText={setFullName}
-                  placeholder="Ej: Asaí López"
+                  placeholder="Ej: John Smith"
                   placeholderTextColor={C.textLight}
                   autoCapitalize="words"
                 />
@@ -138,6 +147,27 @@ export default function AuthScreen() {
               )}
             </TouchableOpacity>
 
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>o</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleBtn}
+              onPress={async () => {
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: 'google',
+                  options: { redirectTo: window.location.origin },
+                });
+                if (error) Alert.alert('Google Sign-In', error.message || 'Google aún no está configurado. Usa email/password.');
+              }}
+              disabled={loading}
+            >
+              <Ionicons name="logo-google" size={20} color="#4285F4" />
+              <Text style={styles.googleText}>Continuar con Google</Text>
+            </TouchableOpacity>
+
             {!isLogin && (
               <Text style={styles.hint}>
                 Después de crear tu cuenta te pedirá que configures tu empresa (toma ~5 minutos).
@@ -166,4 +196,9 @@ const styles = StyleSheet.create({
   submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.primaryDark, padding: 16, borderRadius: 10, marginTop: 10 },
   submitText: { color: 'white', fontWeight: '600', fontSize: 16 },
   hint: { color: C.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4, lineHeight: 18 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 4 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
+  dividerText: { color: C.textLight, fontSize: 13 },
+  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: 'white' },
+  googleText: { color: C.text, fontWeight: '500', fontSize: 15 },
 });
