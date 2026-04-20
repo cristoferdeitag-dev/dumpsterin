@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  SafeAreaView, StyleSheet, Switch, Alert, ActivityIndicator,
+  SafeAreaView, StyleSheet, Switch, Alert, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -14,19 +14,40 @@ import {
   DEFAULT_POLICIES,
 } from '../src/lib/onboarding';
 import { useAuth } from '../src/context/AuthContext';
+import {
+  bg, bgCard, bgElevated, border,
+  primary, primaryDark, success, danger,
+  text as textColor, textSecondary, textMuted,
+} from '../src/theme/colors';
 
+// Aliases para usar con el style system existente
 const C = {
-  bg: '#FFFFFF',
-  surface: '#F7F7F7',
-  border: '#E8E8E8',
-  primary: '#ffb77d',
-  primaryDark: '#ff8c00',
-  text: '#1A1A1A',
-  textMuted: '#666666',
-  textLight: '#999999',
-  success: '#00C853',
-  danger: '#FF3D00',
+  bg,
+  surface: bgCard,
+  border,
+  primary,
+  primaryDark,
+  text: textColor,
+  textMuted: textSecondary,
+  textLight: textMuted,
+  success,
+  danger,
 };
+
+const COUNTRY_CODES = [
+  { code: '+1',  country: 'USA / Canadá', flag: '🇺🇸' },
+  { code: '+52', country: 'México', flag: '🇲🇽' },
+  { code: '+34', country: 'España', flag: '🇪🇸' },
+  { code: '+57', country: 'Colombia', flag: '🇨🇴' },
+  { code: '+54', country: 'Argentina', flag: '🇦🇷' },
+  { code: '+56', country: 'Chile', flag: '🇨🇱' },
+  { code: '+51', country: 'Perú', flag: '🇵🇪' },
+];
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function isValidEmail(e) { return EMAIL_REGEX.test((e || '').trim()); }
+function cleanPhoneDigits(s) { return (s || '').replace(/\D/g, ''); }
 
 const STEPS = [
   { id: 'company', title: 'Empresa', icon: 'business' },
@@ -47,9 +68,11 @@ export default function OnboardingScreen() {
 
   // Form state
   const [company, setCompany] = useState({
-    name: '', slug: '', phone: '', email: '', website: '', timezone: 'America/Los_Angeles',
+    name: '', slug: '', countryCode: '+1', phoneDigits: '', email: '', website: '', timezone: 'America/Los_Angeles',
   });
   const [slugStatus, setSlugStatus] = useState(null); // null | 'available' | 'taken'
+  const [emailError, setEmailError] = useState(null);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [serviceCities, setServiceCities] = useState('');
   const [serviceZips, setServiceZips] = useState('');
   const [fleet, setFleet] = useState({ 10: 0, 20: 0, 30: 0, 40: 0 });
@@ -92,7 +115,10 @@ export default function OnboardingScreen() {
 
   const validateStep = () => {
     if (currentStep.id === 'company') {
-      if (!company.name || !company.phone || !company.email) return 'Faltan campos requeridos';
+      if (!company.name) return 'Ingresa el nombre de la empresa';
+      if (!company.phoneDigits || company.phoneDigits.length !== 10) return 'El teléfono debe tener 10 dígitos';
+      if (!company.email) return 'Ingresa un email';
+      if (!isValidEmail(company.email)) return 'El email no parece válido';
       if (slugStatus === 'taken') return 'El slug ya está en uso';
     }
     if (currentStep.id === 'fleet') {
@@ -125,8 +151,10 @@ export default function OnboardingScreen() {
     const zips = serviceZips.split(/[\s,\n]+/).filter(Boolean);
     const cities = serviceCities.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
 
+    const fullPhone = `${company.countryCode} ${company.phoneDigits}`;
     const result = await createCompanyWithSetup({
       ...company,
+      phone: fullPhone,
       serviceZips: zips,
       serviceCities: cities,
       fleet,
@@ -170,6 +198,10 @@ export default function OnboardingScreen() {
             updateName={updateName}
             checkSlug={checkSlug}
             slugStatus={slugStatus}
+            emailError={emailError}
+            setEmailError={setEmailError}
+            showCountryPicker={showCountryPicker}
+            setShowCountryPicker={setShowCountryPicker}
           />
         )}
         {currentStep.id === 'area' && (
@@ -244,7 +276,23 @@ export default function OnboardingScreen() {
 
 // ━━━ Step components ━━━
 
-function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus }) {
+function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, emailError, setEmailError, showCountryPicker, setShowCountryPicker }) {
+  const selectedCountry = COUNTRY_CODES.find(c => c.code === company.countryCode) || COUNTRY_CODES[0];
+
+  const handlePhoneChange = (raw) => {
+    const digits = cleanPhoneDigits(raw).slice(0, 10);
+    setCompany({ ...company, phoneDigits: digits });
+  };
+
+  const handleEmailChange = (email) => {
+    setCompany({ ...company, email });
+    if (email && !isValidEmail(email)) {
+      setEmailError('Email no válido');
+    } else {
+      setEmailError(null);
+    }
+  };
+
   return (
     <View style={{ gap: 14 }}>
       <Field label="Nombre de la empresa *">
@@ -252,17 +300,18 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus })
           style={styles.input}
           value={company.name}
           onChangeText={updateName}
-          placeholder="Ej: TP Dumpsters"
+          placeholder="Ej: Kali Dumpsters"
           placeholderTextColor={C.textLight}
         />
       </Field>
+
       <Field label="Slug (identificador único)">
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <TextInput
             style={[styles.input, { flex: 1 }]}
             value={company.slug}
             onChangeText={slug => setCompany({ ...company, slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-            placeholder="tp-dumpsters"
+            placeholder="kali-dumpsters"
             placeholderTextColor={C.textLight}
             onBlur={checkSlug}
           />
@@ -270,37 +319,92 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus })
           {slugStatus === 'taken' && <Ionicons name="close-circle" size={28} color={C.danger} />}
         </View>
       </Field>
-      <Field label="Teléfono *">
-        <TextInput
-          style={styles.input}
-          value={company.phone}
-          onChangeText={phone => setCompany({ ...company, phone })}
-          placeholder="+1 510 650 2083"
-          keyboardType="phone-pad"
-          placeholderTextColor={C.textLight}
-        />
+
+      <Field label="Teléfono de la empresa *">
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.input, styles.countryBtn]}
+            onPress={() => setShowCountryPicker(true)}
+          >
+            <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
+            <Text style={styles.countryCode}>{selectedCountry.code}</Text>
+            <Ionicons name="chevron-down" size={14} color={C.textMuted} />
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={company.phoneDigits}
+            onChangeText={handlePhoneChange}
+            placeholder="5106502083"
+            keyboardType="number-pad"
+            maxLength={10}
+            placeholderTextColor={C.textLight}
+          />
+        </View>
+        <Text style={styles.fieldHint}>
+          {company.phoneDigits.length === 10
+            ? `✓ ${selectedCountry.code} ${company.phoneDigits}`
+            : `${company.phoneDigits.length}/10 dígitos`}
+        </Text>
       </Field>
+
       <Field label="Email *">
         <TextInput
-          style={styles.input}
+          style={[styles.input, emailError && { borderColor: C.danger }]}
           value={company.email}
-          onChangeText={email => setCompany({ ...company, email })}
-          placeholder="contact@tudumpsters.com"
+          onChangeText={handleEmailChange}
+          placeholder="contacto@tuempresa.com"
           keyboardType="email-address"
           autoCapitalize="none"
           placeholderTextColor={C.textLight}
         />
+        {emailError && <Text style={[styles.fieldHint, { color: C.danger }]}>{emailError}</Text>}
       </Field>
+
       <Field label="Sitio web (opcional)">
         <TextInput
           style={styles.input}
           value={company.website}
           onChangeText={website => setCompany({ ...company, website })}
-          placeholder="tudumpsters.com"
+          placeholder="tuempresa.com"
           autoCapitalize="none"
           placeholderTextColor={C.textLight}
         />
       </Field>
+
+      <Modal
+        visible={showCountryPicker}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCountryPicker(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Selecciona país</Text>
+              <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                <Ionicons name="close" size={24} color={C.text} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={COUNTRY_CODES}
+              keyExtractor={item => item.code}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.countryRow}
+                  onPress={() => {
+                    setCompany({ ...company, countryCode: item.code });
+                    setShowCountryPicker(false);
+                  }}
+                >
+                  <Text style={styles.countryFlag}>{item.flag}</Text>
+                  <Text style={styles.countryRowText}>{item.country}</Text>
+                  <Text style={styles.countryRowCode}>{item.code}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -614,4 +718,15 @@ const styles = StyleSheet.create({
   addDriverBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: C.border },
   summaryCard: { padding: 14, backgroundColor: C.surface, borderRadius: 10 },
   summaryTitle: { fontWeight: '600', fontSize: 15, color: C.text, marginBottom: 8 },
+  fieldHint: { fontSize: 12, color: C.textLight, marginTop: 6 },
+  countryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10 },
+  countryFlag: { fontSize: 20 },
+  countryCode: { fontSize: 15, fontWeight: '500', color: C.text },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: C.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30, maxHeight: '70%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: C.border },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: C.text },
+  countryRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  countryRowText: { flex: 1, fontSize: 15, color: C.text },
+  countryRowCode: { fontSize: 15, fontWeight: '500', color: C.textMuted },
 });

@@ -5,9 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
+import { useAuth } from '../../src/context/AuthContext';
 import { COMPANY } from '../../src/data/mockData';
 import {
   bg,
@@ -67,7 +71,27 @@ function DriverRow({ driver }) {
 
 export default function SettingsScreen() {
   const { state } = useApp();
+  const { user, profile, companyName, signOut } = useAuth();
+  const router = useRouter();
   const drivers = state.drivers || [];
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Seguro que quieres salir?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar sesión',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            router.replace('/auth');
+          },
+        },
+      ],
+    );
+  };
   const serviceAreas = COMPANY.serviceArea || [];
 
   return (
@@ -147,6 +171,19 @@ export default function SettingsScreen() {
             <Text style={styles.poweredByText}>Powered by Dumpsterin</Text>
           </View>
         </SectionCard>
+
+        {/* Usuario / Cerrar sesión */}
+        {user && (
+          <SectionCard title="Tu cuenta" icon="person-circle-outline">
+            <InfoRow label="Email" value={user.email} icon="mail-outline" />
+            {profile?.full_name && <InfoRow label="Nombre" value={profile.full_name} icon="person-outline" />}
+            {companyName && <InfoRow label="Empresa" value={companyName} icon="business-outline" />}
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={20} color={danger} />
+              <Text style={styles.logoutText}>Cerrar sesión</Text>
+            </TouchableOpacity>
+          </SectionCard>
+        )}
 
         <View style={styles.footer} />
       </ScrollView>
@@ -297,5 +334,21 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 20,
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: danger,
+    borderRadius: 10,
+  },
+  logoutText: {
+    color: danger,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

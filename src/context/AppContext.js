@@ -9,6 +9,7 @@ import {
   markReviewRequested as sbMarkReviewRequested,
   bulkMarkReviewsRequestedBefore as sbBulkMarkReviewsBefore,
 } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 const AppContext = createContext();
 
@@ -152,9 +153,26 @@ function getInitialState() {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, null, getInitialState);
+  const { isAuthenticated, hasCompany, companyId, loading: authLoading } = useAuth();
 
-  // Load data from Supabase on mount
+  // Load data from Supabase only when authenticated and company is known
   useEffect(() => {
+    if (authLoading) return;
+
+    if (!isAuthenticated || !hasCompany || !companyId) {
+      // No session or no company → show empty state, don't fetch data
+      dispatch({
+        type: 'SET_DATA',
+        payload: {
+          bookings: [],
+          dumpsters: [],
+          drivers: [],
+          loading: false,
+        },
+      });
+      return;
+    }
+
     async function loadFromSupabase() {
       try {
         const [bookings, dumpsters, drivers] = await Promise.all([
@@ -163,27 +181,22 @@ export function AppProvider({ children }) {
           fetchDrivers(),
         ]);
 
-        if (bookings.length > 0 || dumpsters.length > 0) {
-          dispatch({
-            type: 'SET_DATA',
-            payload: {
-              bookings: bookings.length > 0 ? bookings : initialBookings,
-              dumpsters: dumpsters.length > 0 ? dumpsters : initialDumpsters,
-              drivers: drivers.length > 0 ? drivers : initialDrivers,
-            },
-          });
-          console.log(`Loaded from Supabase: ${bookings.length} bookings, ${dumpsters.length} dumpsters, ${drivers.length} drivers`);
-        } else {
-          dispatch({ type: 'SET_DATA', payload: { loading: false } });
-          console.log('Supabase empty, using mock data');
-        }
+        dispatch({
+          type: 'SET_DATA',
+          payload: {
+            bookings: bookings || [],
+            dumpsters: dumpsters || [],
+            drivers: drivers || [],
+          },
+        });
+        console.log(`Loaded: ${bookings.length} bookings, ${dumpsters.length} dumpsters, ${drivers.length} drivers`);
       } catch (err) {
-        console.error('Supabase load failed, using mock data:', err);
+        console.error('Supabase load failed:', err);
         dispatch({ type: 'SET_DATA', payload: { loading: false } });
       }
     }
     loadFromSupabase();
-  }, []);
+  }, [isAuthenticated, hasCompany, companyId, authLoading]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
