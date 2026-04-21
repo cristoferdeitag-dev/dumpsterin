@@ -9,7 +9,7 @@ export const COMPANY = {
   webDiscount: 5, // 5% online booking discount
   cancellationFee: 150,
   cancellationNotice: '24hrs',
-  overweightFee: 125, // per ton prorated
+  overweightFee: 135, // per ton prorated
   bilingual: true,
   serviceArea: [
     'Oakland', 'Berkeley', 'San Francisco', 'Richmond', 'Vallejo',

@@ -43,7 +43,7 @@ const WEIGHT_LIMITS = {
   '30yd': 3,
 };
 
-const OVERWEIGHT_RATE = 125; // per ton
+const OVERWEIGHT_RATE = 135; // per ton
 
 function getWindowLabel(windowId) {
   const w = DELIVERY_WINDOWS.find(d => d.id === windowId);

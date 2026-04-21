@@ -102,7 +102,7 @@ export default function BookingDetail() {
   const [chargingExtra, setChargingExtra] = useState(false);
 
   const EXTRA_CHARGE_TYPES = [
-    { id: 'overweight', label: 'Overweight', unit: 'ton', rate: 125 },
+    { id: 'overweight', label: 'Overweight', unit: 'ton', rate: 135 },
     { id: 'extra_days', label: 'Extra Days', unit: 'day', rate: 49 },
     { id: 'mattress', label: 'Mattress', unit: 'each', rate: 35 },
     { id: 'tires', label: 'Tires', unit: 'each', rate: 30 },

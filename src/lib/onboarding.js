@@ -20,7 +20,7 @@ export async function createCompanyWithSetup(data) {
     fleet = {}, // {10: 5, 20: 5, 30: 5}
     services = [], // ['General Debris', 'Clean Soil', ...]
     pricing = [], // [{service: 'General Debris', size: 10, price: 649}, ...]
-    policies = {}, // {rentalDays: 7, extraDayRate: 49, overweightPerTon: 125, ...}
+    policies = {}, // {rentalDays: 7, extraDayRate: 49, overweightPerTon: 135, ...}
     drivers = [], // [{name: 'Asai', phone: '+1555...'}, ...]
   } = data;
 
@@ -61,7 +61,7 @@ export async function createCompanyWithSetup(data) {
       base_price: p.price,
       rental_days: policies.rentalDays || 7,
       extra_day_rate: policies.extraDayRate || 49,
-      overweight_rate: policies.overweightPerTon || 125,
+      overweight_rate: policies.overweightPerTon || 135,
       is_active: true,
     }));
     const { error: pErr } = await supabase.from('pricing').insert(pricingRows);
@@ -157,7 +157,7 @@ export const SERVICE_OPTIONS = [
 export const DEFAULT_POLICIES = {
   rentalDays: 7,
   extraDayRate: 49,
-  overweightPerTon: 125,
+  overweightPerTon: 135,
   mattressFee: 35,
   applianceFee: 50,
   tireFee: 30,
