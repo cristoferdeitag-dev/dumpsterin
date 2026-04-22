@@ -92,34 +92,45 @@ export default function RevenueScreen() {
   const now = new Date();
   const currentYM = now.toISOString().slice(0, 7);
 
+  const CLOSED_STATUSES = ['completed', 'delivered', 'picked_up', 'pickup_ready', 'dumping', 'ready_for_pickup'];
+  const EXPECTED_STATUSES = ['scheduled', 'in_transit', 'on_site', 'quote_sent'];
+
   const stats = useMemo(() => {
     const range = dateFilter === 'custom'
       ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
       : getDateRange(dateFilter);
 
-    const completed = bookings.filter(
+    const inRange = bookings.filter(
       (b) => b.status !== 'cancelled' && (b.deliveryDate || '') >= range.start && (b.deliveryDate || '') <= range.end
     );
-    const totalRevenue = completed.reduce((s, b) => s + (b.total || 0), 0);
-    const thisMonth = completed.filter((b) => (b.deliveryDate || '').startsWith(currentYM));
-    const monthRevenue = thisMonth.reduce((s, b) => s + (b.total || 0), 0);
-    const completedOnly = bookings.filter((b) => b.status === 'completed');
-    const completedRevenue = completedOnly.reduce((s, b) => s + (b.total || 0), 0);
-    const avgValue = completed.length ? totalRevenue / completed.length : 0;
+    const closed = inRange.filter((b) => CLOSED_STATUSES.includes(b.status));
+    const expected = inRange.filter((b) => EXPECTED_STATUSES.includes(b.status));
 
-    // Revenue by sales rep (generatedBy field, fallback to source)
+    const closedRevenue = closed.reduce((s, b) => s + (b.total || 0), 0);
+    const expectedRevenue = expected.reduce((s, b) => s + (b.total || 0), 0);
+    const totalRevenue = closedRevenue + expectedRevenue;
+
+    const thisMonth = inRange.filter((b) => (b.deliveryDate || '').startsWith(currentYM));
+    const monthRevenue = thisMonth.reduce((s, b) => s + (b.total || 0), 0);
+    const avgValue = inRange.length ? totalRevenue / inRange.length : 0;
+
+    // Revenue by sales rep — split closed vs expected (generatedBy field, fallback to source)
     const repMap = {};
-    completed.forEach((b) => {
+    const addToRep = (b, bucket) => {
       const rep = b.generatedBy || b.source || 'unknown';
-      if (!repMap[rep]) repMap[rep] = { name: rep, revenue: 0, count: 0 };
-      repMap[rep].revenue += b.total || 0;
+      if (!repMap[rep]) repMap[rep] = { name: rep, closed: 0, expected: 0, count: 0 };
+      repMap[rep][bucket] += b.total || 0;
       repMap[rep].count += 1;
-    });
-    const byRep = Object.values(repMap).sort((a, b) => b.revenue - a.revenue);
+    };
+    closed.forEach((b) => addToRep(b, 'closed'));
+    expected.forEach((b) => addToRep(b, 'expected'));
+    const byRep = Object.values(repMap)
+      .map((r) => ({ ...r, revenue: r.closed + r.expected }))
+      .sort((a, b) => b.revenue - a.revenue);
 
     // Revenue by service type
     const svcMap = {};
-    completed.forEach((b) => {
+    inRange.forEach((b) => {
       const svc = b.serviceType || 'Other';
       if (!svcMap[svc]) svcMap[svc] = { name: svc, revenue: 0, count: 0 };
       svcMap[svc].revenue += b.total || 0;
@@ -129,7 +140,7 @@ export default function RevenueScreen() {
 
     // Revenue by dumpster size
     const sizeMap = {};
-    completed.forEach((b) => {
+    inRange.forEach((b) => {
       const sz = b.dumpsterSize || 'Unknown';
       if (!sizeMap[sz]) sizeMap[sz] = { name: sz, revenue: 0, count: 0 };
       sizeMap[sz].revenue += b.total || 0;
@@ -139,7 +150,7 @@ export default function RevenueScreen() {
 
     // Top customers
     const custMap = {};
-    completed.forEach((b) => {
+    inRange.forEach((b) => {
       const name = b.customerName || 'Unknown';
       if (!custMap[name]) custMap[name] = { name, revenue: 0, count: 0 };
       custMap[name].revenue += b.total || 0;
@@ -163,9 +174,11 @@ export default function RevenueScreen() {
 
     return {
       totalRevenue,
+      closedRevenue,
+      expectedRevenue,
+      closedCount: closed.length,
+      expectedCount: expected.length,
       monthRevenue,
-      completedCount: completedOnly.length,
-      completedRevenue,
       avgValue,
       byRep,
       byService,
@@ -284,19 +297,28 @@ export default function RevenueScreen() {
 
         {/* Summary Cards */}
         <View style={s.cardsRow}>
-          <View style={[s.card, s.cardHalf]}>
-            <Text style={s.cardLabel}>Total Revenue</Text>
+          <View style={[s.card, { flex: 1 }]}>
+            <Text style={s.cardLabel}>Total Projected</Text>
             <Text style={s.cardValueBig}>{fmt(stats.totalRevenue)}</Text>
+            <Text style={s.cardHint}>Closed + Expected</Text>
           </View>
-          <View style={[s.card, s.cardHalf]}>
-            <Text style={s.cardLabel}>This Month</Text>
-            <Text style={s.cardValueBig}>{fmt(stats.monthRevenue)}</Text>
+        </View>
+        <View style={s.cardsRow}>
+          <View style={[s.card, s.cardHalf, { borderLeftWidth: 3, borderLeftColor: '#00b5fc' }]}>
+            <Text style={s.cardLabel}>✅ Closed</Text>
+            <Text style={s.cardValueBig}>{fmt(stats.closedRevenue)}</Text>
+            <Text style={s.cardHint}>{stats.closedCount} bookings</Text>
+          </View>
+          <View style={[s.card, s.cardHalf, { borderLeftWidth: 3, borderLeftColor: '#ff8c00' }]}>
+            <Text style={s.cardLabel}>📅 Expected</Text>
+            <Text style={s.cardValueBig}>{fmt(stats.expectedRevenue)}</Text>
+            <Text style={s.cardHint}>{stats.expectedCount} scheduled</Text>
           </View>
         </View>
         <View style={s.cardsRow}>
           <View style={[s.card, s.cardHalf]}>
-            <Text style={s.cardLabel}>Completed Bookings</Text>
-            <Text style={s.cardValue}>{stats.completedCount}</Text>
+            <Text style={s.cardLabel}>This Month</Text>
+            <Text style={s.cardValue}>{fmt(stats.monthRevenue)}</Text>
           </View>
           <View style={[s.card, s.cardHalf]}>
             <Text style={s.cardLabel}>Avg Booking Value</Text>
@@ -317,13 +339,30 @@ export default function RevenueScreen() {
                 <Text style={s.repMetaText}>{rep.count} bookings</Text>
                 <Text style={s.repMetaText}>{pct(rep.revenue, stats.totalRevenue)}</Text>
               </View>
+              {/* Stacked bar: closed (blue) + expected (orange) */}
               <View style={s.barBg}>
                 <View
                   style={[
                     s.barFill,
-                    { width: `${(rep.revenue / maxRepRevenue) * 100}%`, backgroundColor: C.primaryContainer },
+                    { width: `${(rep.closed / maxRepRevenue) * 100}%`, backgroundColor: '#00b5fc' },
                   ]}
                 />
+                <View
+                  style={[
+                    s.barFill,
+                    {
+                      position: 'absolute',
+                      left: `${(rep.closed / maxRepRevenue) * 100}%`,
+                      width: `${(rep.expected / maxRepRevenue) * 100}%`,
+                      backgroundColor: '#ff8c00',
+                      opacity: 0.7,
+                    },
+                  ]}
+                />
+              </View>
+              <View style={[s.repMeta, { marginTop: 4 }]}>
+                <Text style={[s.repMetaText, { color: '#00b5fc' }]}>✅ {fmt(rep.closed)}</Text>
+                <Text style={[s.repMetaText, { color: '#ff8c00' }]}>📅 {fmt(rep.expected)}</Text>
               </View>
             </View>
           ))}
@@ -482,6 +521,11 @@ const s = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: C.onSurface,
+  },
+  cardHint: {
+    fontSize: 11,
+    color: C.onSurfaceVariant,
+    marginTop: 4,
   },
 
   // Sections
