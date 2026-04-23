@@ -37,6 +37,7 @@ const SERVICE_ZIPS = {
   '94901': 'San Rafael', '94903': 'San Rafael', '94945': 'Novato', '94947': 'Novato', '94949': 'Novato',
   '94952': 'Petaluma', '94954': 'Petaluma', '94010': 'Millbrae', '94066': 'San Bruno',
   '94549': 'Lafayette', '94563': 'Orinda', '94548': 'Knightsen', '95035': 'Milpitas',
+  '94526': 'Danville', '94506': 'Danville', '94507': 'Alamo', '94583': 'San Ramon', '94582': 'San Ramon',
 };
 
 const STATUS_COLORS = {
