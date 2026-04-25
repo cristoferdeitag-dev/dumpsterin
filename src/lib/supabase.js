@@ -3,6 +3,25 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://mbirzaocjkhqydtuqmze.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1iaXJ6YW9jamtocXlkdHVxbXplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NjkxNTUsImV4cCI6MjA5MTE0NTE1NX0.-ERkDAXi5YOsy-CdmEEMKDUgpXQQcgJt0HY0b7t2SuA';
 
+const CALENDAR_PUSH_URL = 'https://tpdumpsters.com/api/calendar/push';
+const CALENDAR_PUSH_SECRET = 'tp-dumpsters-calpush-2026';
+
+// Fire-and-forget push to Google Calendar after a booking CRUD. Errors are
+// logged but never block the UI — calendar sync is best-effort, the cron
+// (every 15 min) reconciles anything that drifts.
+function pushToCalendar(op, booking) {
+  if (!booking?.id) return;
+  fetch(CALENDAR_PUSH_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-calendar-push-secret': CALENDAR_PUSH_SECRET },
+    body: JSON.stringify({ op, booking }),
+  })
+    .then((r) => {
+      if (!r.ok) console.warn(`calendar push ${op} returned`, r.status);
+    })
+    .catch((e) => console.warn(`calendar push ${op} failed:`, e));
+}
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
@@ -52,6 +71,7 @@ export async function createBooking(booking) {
     .select()
     .single();
   if (error) { console.error('createBooking error:', error); return null; }
+  pushToCalendar('create', data);
   return mapBookingFromDB(data);
 }
 
@@ -63,15 +83,24 @@ export async function updateBooking(id, updates) {
     .select()
     .single();
   if (error) { console.error('updateBooking error:', error); return null; }
+  pushToCalendar('update', data);
   return mapBookingFromDB(data);
 }
 
 export async function updateBookingStatus(id, status) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('bookings')
     .update({ status })
-    .eq('id', id);
-  if (error) console.error('updateBookingStatus error:', error);
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) { console.error('updateBookingStatus error:', error); return; }
+  // Status changes (cancellations, etc.) might affect the calendar event
+  if (status === 'cancelled') {
+    pushToCalendar('delete', data);
+  } else {
+    pushToCalendar('update', data);
+  }
 }
 
 export async function markReviewRequested(id, timestamp) {
@@ -97,11 +126,19 @@ export async function bulkMarkReviewsRequestedBefore(isoDate) {
 }
 
 export async function deleteBooking(id) {
+  // Read calendar IDs before deleting so we can clean up the events
+  const { data: existing } = await supabase
+    .from('bookings')
+    .select('id, calendar_delivery_id, calendar_pickup_id')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('bookings')
     .delete()
     .eq('id', id);
-  if (error) console.error('deleteBooking error:', error);
+  if (error) { console.error('deleteBooking error:', error); return; }
+  if (existing) pushToCalendar('delete', existing);
 }
 
 // Dumpster UUID → Label lookup cache
