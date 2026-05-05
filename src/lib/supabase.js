@@ -235,8 +235,13 @@ function mapBookingFromDB(b) {
     assignedDumpster: b.dumpster_id ? (_dumpsterLabelMap[b.dumpster_id] || b.dumpster_id) : null,
     assignedDriver: b.driver_id || null,
     notes: b.notes || '',
+    notesFromCustomer: b.notes_from_customer || '',
+    billingAddress: b.billing_address || null,
+    authorizedCharges: !!b.authorized_charges,
     source: b.source || 'phone',
-    generatedBy: _generatedByMap[b.booking_number] || 'asai',
+    // Prefer the editable DB column if set; fall back to the legacy hardcoded
+    // map for older bookings that haven't been re-attributed in the UI yet.
+    generatedBy: b.sales_rep || _generatedByMap[b.booking_number] || 'asai',
     reviewRequestedAt: b.review_requested_at || null,
     createdAt: b.created_at ? b.created_at.split('T')[0] : '',
     // DB-specific fields

@@ -15,6 +15,7 @@ import { bgInput } from '../../src/theme/colors';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
+import { updateBooking as sbUpdateBooking } from '../../src/lib/supabase';
 import { BOOKING_STATUSES } from '../../src/data/mockData';
 import {
   bg,
@@ -100,6 +101,126 @@ export default function BookingDetail() {
   const [chargeAmount, setChargeAmount] = useState('');
   const [chargeQty, setChargeQty] = useState('1');
   const [chargingExtra, setChargingExtra] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [showMarkPaid, setShowMarkPaid] = useState(false);
+  const [markPaidMethod, setMarkPaidMethod] = useState('cash');
+  const [markPaidNotes, setMarkPaidNotes] = useState('');
+  const [invoiceActionBusy, setInvoiceActionBusy] = useState(false);
+
+  // Common helper for the V2 invoice actions (mark paid / void / charge).
+  // All three look up the Stripe invoice by booking_id metadata server-side.
+  const callInvoiceEndpoint = async (path, body, successMessage) => {
+    setInvoiceActionBusy(true);
+    try {
+      const res = await fetch(`https://tpdumpsters.com/api/invoice/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: booking.bookingNumber || booking.id,
+          ...body,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        Alert.alert('Done', successMessage(data));
+      } else {
+        Alert.alert('Error', data.error || 'Action failed');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Network error');
+    } finally {
+      setInvoiceActionBusy(false);
+    }
+  };
+
+  const handleMarkPaid = () => {
+    callInvoiceEndpoint(
+      'mark-paid',
+      { method: markPaidMethod, notes: markPaidNotes.trim() },
+      (d) => `Invoice marked paid (${markPaidMethod}). $${d.amount?.toFixed(2) || '0.00'}`
+    );
+    setShowMarkPaid(false);
+    setMarkPaidNotes('');
+  };
+
+  const handleVoidInvoice = () => {
+    Alert.alert(
+      'Void invoice',
+      'This invalidates the Stripe invoice. Customer will not be charged. Use this when a booking was cancelled before payment.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Void it',
+          style: 'destructive',
+          onPress: () => callInvoiceEndpoint(
+            'void',
+            { reason: 'Voided from Dumpsterin app' },
+            (d) => `Invoice ${d.action === 'deleted_draft' ? 'deleted (was draft)' : 'voided'}.`
+          ),
+        },
+      ]
+    );
+  };
+
+  const handleAutoCharge = () => {
+    Alert.alert(
+      'Auto-charge customer',
+      "Charge the saved card on file? Requires customer to have a default payment method in Stripe.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Charge',
+          onPress: () => callInvoiceEndpoint(
+            'charge',
+            {},
+            (d) => d.alreadyPaid ? 'Already paid.' : `Charged $${d.amount?.toFixed(2) || '0.00'} successfully.`
+          ),
+        },
+      ]
+    );
+  };
+
+  // Re-send the existing Stripe invoice email + SMS without creating a new one.
+  // Useful when a customer says "no llegó" or you just want a reminder.
+  const handleResendInvoice = async () => {
+    if (resending) return;
+    Alert.alert(
+      'Reenviar invoice',
+      `¿Reenviar el email + SMS al cliente con la invoice original?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Reenviar',
+          onPress: async () => {
+            setResending(true);
+            try {
+              const res = await fetch('https://tpdumpsters.com/api/invoice/resend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  bookingId: booking.bookingNumber || booking.id,
+                  customerName: booking.customerName,
+                  customerEmail: booking.email,
+                  customerPhone: booking.phone,
+                }),
+              });
+              const data = await res.json();
+              if (res.ok && data.ok) {
+                const channels = [data.sentEmail && 'email', data.sentSms && 'SMS'].filter(Boolean).join(' + ');
+                Alert.alert('Listo', `Invoice reenviada por ${channels || 'Stripe'}.`);
+              } else {
+                Alert.alert('Error', data.error || 'No se pudo reenviar la invoice.');
+              }
+            } catch (err) {
+              Alert.alert('Error', 'Sin conexión al servidor. Intenta de nuevo.');
+            } finally {
+              setResending(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const EXTRA_CHARGE_TYPES = [
     { id: 'overweight', label: 'Overweight', unit: 'ton', rate: 135 },
@@ -286,6 +407,45 @@ export default function BookingDetail() {
             <Text style={styles.infoLabel}>Source</Text>
             <Text style={styles.infoValue}>{booking.source || '—'}</Text>
           </View>
+          {/* Sales Rep — editable. Persists to bookings.sales_rep so the
+              attribution on the Home dashboard reflects reality (Asaí
+              2026-04-30: replace the hardcoded map with a real column). */}
+          <View style={styles.infoRow}>
+            <Ionicons name="person-circle-outline" size={18} color={textSecondary} />
+            <Text style={styles.infoLabel}>Sales rep</Text>
+            <View style={{ flexDirection: 'row', gap: 6, flex: 1, justifyContent: 'flex-end' }}>
+              {['asai', 'tiago', 'website'].map((rep) => {
+                const active = (booking.generatedBy || 'asai') === rep;
+                const labelMap = { asai: 'Asai', tiago: 'Tiago', website: 'Web' };
+                return (
+                  <TouchableOpacity
+                    key={rep}
+                    onPress={async () => {
+                      if (active) return;
+                      try {
+                        await sbUpdateBooking(booking._dbId || booking.id, { sales_rep: rep });
+                        dispatch({ type: 'UPDATE_BOOKING', payload: { ...booking, generatedBy: rep } });
+                      } catch (e) {
+                        Alert.alert('Error', "Couldn't update sales rep.");
+                      }
+                    }}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 9999,
+                      backgroundColor: active ? primary : 'transparent',
+                      borderWidth: 1,
+                      borderColor: active ? primary : '#D8D8D8',
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: active ? '#4d2600' : textSecondary }}>
+                      {labelMap[rep]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         </View>
 
         {/* Delivery Info */}
@@ -313,7 +473,47 @@ export default function BookingDetail() {
               <Text style={[styles.infoValue, { flex: 1 }]}>{booking.notes}</Text>
             </View>
           ) : null}
+          {booking.notesFromCustomer ? (
+            <View style={styles.infoRow}>
+              <Ionicons name="chatbubble-outline" size={18} color={textSecondary} />
+              <Text style={styles.infoLabel}>Customer note</Text>
+              <Text style={[styles.infoValue, { flex: 1, fontStyle: 'italic' }]}>
+                {booking.notesFromCustomer}
+              </Text>
+            </View>
+          ) : null}
         </View>
+
+        {/* Billing Address (only if customer entered one different from delivery) */}
+        {booking.billingAddress &&
+        (booking.billingAddress.line1 || booking.billingAddress.city) ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Billing Address</Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="card-outline" size={18} color={textSecondary} />
+              <Text style={styles.infoLabel}>Bill to</Text>
+              <Text style={[styles.infoValue, { flex: 1 }]}>
+                {[
+                  booking.billingAddress.line1,
+                  [booking.billingAddress.city, booking.billingAddress.state, booking.billingAddress.zip]
+                    .filter(Boolean)
+                    .join(', '),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </View>
+            {booking.authorizedCharges ? (
+              <View style={styles.infoRow}>
+                <Ionicons name="checkmark-circle-outline" size={18} color="#15a37b" />
+                <Text style={styles.infoLabel}>Auth.</Text>
+                <Text style={[styles.infoValue, { flex: 1, color: '#15a37b' }]}>
+                  Customer pre-authorized extra charges
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Dumpster Info */}
         <View style={styles.card}>
@@ -500,8 +700,125 @@ export default function BookingDetail() {
           </TouchableOpacity>
         </Modal>
 
+        {/* Mark as paid modal — pick the payment method that came in outside
+            of Stripe (cash, check, Zelle, other) so the invoice on Stripe
+            gets correctly marked paid_out_of_band. */}
+        <Modal visible={showMarkPaid} transparent animationType="fade" onRequestClose={() => setShowMarkPaid(false)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMarkPaid(false)}>
+            <View style={[styles.extraChargeModal, { padding: 20 }]} onStartShouldSetResponder={() => true}>
+              <Text style={{ fontSize: 18, fontWeight: '800', marginBottom: 12 }}>Mark invoice as paid</Text>
+              <Text style={{ fontSize: 13, color: textSecondary, marginBottom: 14 }}>
+                Use this when the customer paid outside of Stripe (cash, check, Zelle).
+              </Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+                Method
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                {[
+                  { id: 'cash', label: 'Cash' },
+                  { id: 'check', label: 'Check' },
+                  { id: 'zelle', label: 'Zelle' },
+                  { id: 'other', label: 'Other' },
+                ].map((m) => {
+                  const active = markPaidMethod === m.id;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      onPress={() => setMarkPaidMethod(m.id)}
+                      style={{
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
+                        borderRadius: 9999,
+                        borderWidth: 1.5,
+                        borderColor: active ? '#00b386' : border,
+                        backgroundColor: active ? '#00b38611' : 'transparent',
+                      }}
+                    >
+                      <Text style={{ color: active ? '#00b386' : textColor, fontWeight: '700', fontSize: 13 }}>{m.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+                Notes (optional)
+              </Text>
+              <TextInput
+                value={markPaidNotes}
+                onChangeText={setMarkPaidNotes}
+                placeholder="e.g. Check #1234, paid Tuesday"
+                placeholderTextColor={textMuted}
+                multiline
+                style={{
+                  borderWidth: 1,
+                  borderColor: border,
+                  borderRadius: 8,
+                  padding: 10,
+                  fontSize: 14,
+                  minHeight: 60,
+                  marginBottom: 14,
+                }}
+              />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity onPress={() => setShowMarkPaid(false)} style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 8, backgroundColor: border + '88' }}>
+                  <Text style={{ fontWeight: '700', color: textColor }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleMarkPaid} disabled={invoiceActionBusy} style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 8, backgroundColor: '#00b386' }}>
+                  <Text style={{ fontWeight: '700', color: '#fff' }}>{invoiceActionBusy ? '...' : 'Mark paid'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
         {/* Action Buttons */}
         <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.duplicateBtn]}
+            onPress={() => router.push(`/booking/create?copyFrom=${id}`)}
+          >
+            <Ionicons name="copy-outline" size={20} color={info} />
+            <Text style={styles.duplicateBtnText}>Duplicar invoice</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.resendBtn]}
+            onPress={handleResendInvoice}
+            disabled={resending}
+          >
+            <Ionicons name="mail-outline" size={20} color={success} />
+            <Text style={styles.resendBtnText}>
+              {resending ? 'Resending...' : 'Resend invoice'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* V2 invoice actions — Asaí 2026-04-30 */}
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.markPaidBtn]}
+            onPress={() => setShowMarkPaid(true)}
+            disabled={invoiceActionBusy}
+          >
+            <Ionicons name="cash-outline" size={20} color="#00b386" />
+            <Text style={styles.markPaidBtnText}>Mark as paid</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.chargeBtn]}
+            onPress={handleAutoCharge}
+            disabled={invoiceActionBusy}
+          >
+            <Ionicons name="flash-outline" size={20} color={primaryDark} />
+            <Text style={styles.chargeBtnText}>Auto-charge card</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.voidBtn]}
+            onPress={handleVoidInvoice}
+            disabled={invoiceActionBusy}
+          >
+            <Ionicons name="close-circle-outline" size={20} color={danger} />
+            <Text style={styles.voidBtnText}>Void invoice</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.actionBtn, styles.editBtn]}
             onPress={() => router.push(`/booking/edit?id=${id}`)}
@@ -708,6 +1025,51 @@ const styles = StyleSheet.create({
   },
   editBtnText: {
     color: primary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  duplicateBtn: {
+    borderColor: info,
+    backgroundColor: info + '11',
+  },
+  duplicateBtnText: {
+    color: info,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  resendBtn: {
+    borderColor: success,
+    backgroundColor: success + '11',
+  },
+  resendBtnText: {
+    color: success,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  markPaidBtn: {
+    borderColor: '#00b386',
+    backgroundColor: '#00b38611',
+  },
+  markPaidBtnText: {
+    color: '#00b386',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  chargeBtn: {
+    borderColor: primaryDark,
+    backgroundColor: primaryDark + '11',
+  },
+  chargeBtnText: {
+    color: primaryDark,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  voidBtn: {
+    borderColor: danger,
+    backgroundColor: danger + '11',
+  },
+  voidBtnText: {
+    color: danger,
     fontSize: 16,
     fontWeight: '600',
   },
