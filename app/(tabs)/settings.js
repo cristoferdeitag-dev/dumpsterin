@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { supabase, getCompanyId } from '../../src/lib/supabase';
 import {
   View,
   Text,
@@ -75,14 +76,29 @@ export default function SettingsScreen() {
   const router = useRouter();
   const drivers = state.drivers || [];
 
+  const [trucks, setTrucks] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      const cid = await getCompanyId();
+      if (!cid) return;
+      const { data } = await supabase
+        .from('trucks')
+        .select('id, label, is_active')
+        .eq('company_id', cid)
+        .order('label');
+      setTrucks(data || []);
+    })();
+  }, []);
+
   const handleLogout = () => {
     Alert.alert(
-      'Cerrar sesión',
-      '¿Seguro que quieres salir?',
+      'Sign out',
+      'Are you sure you want to sign out?',
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Cerrar sesión',
+          text: 'Sign out',
           style: 'destructive',
           onPress: async () => {
             await signOut();
@@ -162,6 +178,30 @@ export default function SettingsScreen() {
           )}
         </SectionCard>
 
+        {/* Trucks — added 2026-04-30 per Asaí's request alongside drivers. */}
+        <SectionCard title="Trucks" icon="car-outline">
+          {trucks.length > 0 ? (
+            trucks.map((truck) => {
+              const statusColor = truck.is_active ? success : textMuted;
+              const statusLabel = truck.is_active ? 'Active' : 'Inactive';
+              return (
+                <View key={truck.id} style={styles.driverRow}>
+                  <View style={styles.driverAvatar}>
+                    <Ionicons name="car" size={18} color={textSecondary} />
+                  </View>
+                  <Text style={styles.driverName}>{truck.label}</Text>
+                  <View style={[styles.driverStatus, { backgroundColor: statusColor + '1A' }]}>
+                    <View style={[styles.driverDot, { backgroundColor: statusColor }]} />
+                    <Text style={[styles.driverStatusText, { color: statusColor }]}>{statusLabel}</Text>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <Text style={styles.emptyText}>No trucks registered</Text>
+          )}
+        </SectionCard>
+
         {/* App Info */}
         <SectionCard title="App Info" icon="information-circle-outline">
           <InfoRow label="Version" value="1.0.0" icon="code-slash-outline" />
@@ -172,15 +212,15 @@ export default function SettingsScreen() {
           </View>
         </SectionCard>
 
-        {/* Usuario / Cerrar sesión */}
+        {/* Account / Sign out */}
         {user && (
-          <SectionCard title="Tu cuenta" icon="person-circle-outline">
+          <SectionCard title="Your account" icon="person-circle-outline">
             <InfoRow label="Email" value={user.email} icon="mail-outline" />
-            {profile?.full_name && <InfoRow label="Nombre" value={profile.full_name} icon="person-outline" />}
-            {companyName && <InfoRow label="Empresa" value={companyName} icon="business-outline" />}
+            {profile?.full_name && <InfoRow label="Name" value={profile.full_name} icon="person-outline" />}
+            {companyName && <InfoRow label="Company" value={companyName} icon="business-outline" />}
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={20} color={danger} />
-              <Text style={styles.logoutText}>Cerrar sesión</Text>
+              <Text style={styles.logoutText}>Sign out</Text>
             </TouchableOpacity>
           </SectionCard>
         )}

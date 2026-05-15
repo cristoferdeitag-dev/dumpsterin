@@ -1,9 +1,12 @@
 import { Tabs } from 'expo-router';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
+import Assistant from '../../src/components/Assistant';
 
 export default function TabLayout() {
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -71,5 +74,7 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    <Assistant />
+    </View>
   );
 }

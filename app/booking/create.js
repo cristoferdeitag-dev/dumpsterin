@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
 import {
@@ -246,6 +246,7 @@ function AddressAutocomplete({ value, onChangeText, onAddressSelect, placeholder
 export default function CreateBooking() {
   const router = useRouter();
   const { state, dispatch } = useApp();
+  const { copyFrom } = useLocalSearchParams();
 
   // Customer fields
   const [name, setName] = useState('');
@@ -286,6 +287,67 @@ export default function CreateBooking() {
   // Customer autocomplete from Stripe API
   const [stripeCustomers, setStripeCustomers] = useState([]);
   const [searchTimeout, setSearchTimeout] = useState(null);
+
+  // Prefill form from an existing booking when the user clicks "Duplicar".
+  // The source booking is already in state.bookings (loaded by the dashboard
+  // on app start), so no extra fetch needed. We only run this once when
+  // copyFrom is set and we haven't already populated the form.
+  const prefillRanRef = useRef(false);
+  useEffect(() => {
+    if (!copyFrom || prefillRanRef.current) return;
+    const src = state.bookings?.find((b) => b.id === copyFrom || b.bookingNumber === copyFrom);
+    if (!src) return;
+    prefillRanRef.current = true;
+
+    setName(src.customerName || '');
+    setPhone(src.phone || '');
+    setEmail(src.email || '');
+
+    // deliveryAddress in state.bookings is "Street, City, ST, ZIP" — split it back.
+    const dParts = (src.deliveryAddress || '').split(',').map((s) => s.trim());
+    if (dParts[0]) setDeliveryAddress(dParts[0]);
+    if (dParts[1]) setDeliveryCity(dParts[1]);
+    if (dParts[2]) {
+      const stZip = dParts[2].split(/\s+/);
+      if (stZip[0]) setDeliveryState(stZip[0]);
+      if (stZip[1]) setDeliveryZip(stZip[1]);
+    } else if (dParts[3]) {
+      setDeliveryZip(dParts[3]);
+    }
+
+    // We don't store billing address separately yet — default to delivery
+    // (Asaí can flip the toggle if she needs it different).
+    setSameAsBilling(true);
+
+    // Service / size / pricing
+    if (src.dumpsterSize) {
+      const sizeId = String(src.dumpsterSize).toLowerCase().replace(/\s/g, '');
+      setDumpsterSize(sizeId.endsWith('yd') ? sizeId : `${sizeId}yd`);
+    }
+    if (src.serviceType) {
+      const svc = SERVICE_TYPES.find(
+        (s) => s.label === src.serviceType || s.id === src.serviceType
+      );
+      setServiceType(svc?.id || src.serviceType);
+    }
+    if (src.materialType) setMaterial(src.materialType);
+    if (src.basePrice) setBasePrice(String(src.basePrice));
+    if (src.discount) setDiscount(String(src.discount));
+    if (Array.isArray(src.specialItems) && src.specialItems.length > 0) {
+      const map = {};
+      for (const it of src.specialItems) {
+        if (it?.id) map[it.id] = it;
+      }
+      setSelectedSpecialItems(map);
+    }
+
+    // Dates default to TODAY for the new quote (the original date is rarely
+    // what the duplicate is for — usually a new delivery). Asaí still picks.
+    if (src.deliveryWindow) setDeliveryWindow(src.deliveryWindow);
+    if (src.notes) setNotes(src.notes);
+    if (src.generatedBy) setGeneratedBy(src.generatedBy);
+    if (src.source) setSource(src.source);
+  }, [copyFrom, state.bookings]);
 
   const searchStripeCustomers = useCallback((query) => {
     if (!query || query.length < 2) {
@@ -443,7 +505,10 @@ export default function CreateBooking() {
     router.back();
   };
 
-  // SEND QUOTE — creates Stripe invoice + sends email & SMS
+  // SEND QUOTE — creates Stripe invoice + sends email & SMS via tpdumpsters.com
+  // Generates a deterministic booking_id BEFORE the invoice is created so the
+  // Stripe invoice carries metadata.booking_id, which the Supabase webhook
+  // uses later to mark the booking paid automatically (no manual reconcile).
   const handleSendQuote = async () => {
     if (!validateForm()) return;
     if (!email.trim() && !phone.trim()) {
@@ -453,41 +518,72 @@ export default function CreateBooking() {
 
     setSendingQuote(true);
     try {
-      const res = await fetch('https://dumpsterin.com/api/quote.php', {
+      // Same id format the AppContext reducer uses, so the booking row in
+      // Supabase will share booking_number with the Stripe invoice's metadata.
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const prefix = (name.trim() || 'BK').slice(0, 4).toUpperCase().replace(/\s/g, '');
+      const bookingId = `CAL-${today}-${prefix}`;
+
+      // Translate Dumpsterin's internal ids → labels the invoice route expects.
+      const svc = SERVICE_TYPES.find((s) => s.id === serviceType);
+      const sz = DUMPSTER_SIZES.find((s) => s.id === dumpsterSize);
+      const serviceLabel = svc?.label || serviceType;
+      const sizeLabel = sz?.label || dumpsterSize;
+
+      const items = [{
+        serviceType: serviceLabel,
+        size: sizeLabel,
+        quantity: 1,
+        customPrice: parseFloat(basePrice) || 0,
+      }];
+
+      const extras = [];
+      if (parseFloat(discount) > 0) {
+        extras.push({ name: 'Online discount', price: -Math.abs(parseFloat(discount)), quantity: 1 });
+      }
+      Object.values(selectedSpecialItems).forEach((it) => {
+        if (it && it.fee > 0) {
+          extras.push({ name: it.label || 'Special item', price: it.fee, quantity: it.qty || 1 });
+        }
+      });
+
+      const res = await fetch('https://tpdumpsters.com/api/invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          bookingId,
           customerName: name.trim(),
-          phone: phone.trim(),
-          email: email.trim(),
+          customerEmail: email.trim(),
+          customerPhone: phone.trim(),
           billingAddress: fullBillingAddress,
           deliveryAddress: fullDeliveryAddress,
-          deliveryDate,
-          deliveryWindow: deliveryWindow || 'morning',
-          dumpsterSize,
-          serviceType,
-          basePrice: parseFloat(basePrice) || 0,
-          discount: parseFloat(discount) || 0,
-          specialItems: Object.values(selectedSpecialItems),
-          total,
-          generatedBy,
+          items,
+          extras,
           notes: notes.trim(),
         }),
       });
       const data = await res.json();
-      if (data.success) {
-        // Save as pending booking
-        dispatch({ type: 'ADD_BOOKING', payload: buildBookingObj('quote_sent') });
+      if (res.ok && data.id) {
+        // Save the booking with the SAME id used in Stripe metadata.
+        dispatch({
+          type: 'ADD_BOOKING',
+          payload: { ...buildBookingObj('quote_sent'), id: bookingId },
+        });
+        const channel = data.sentEmail
+          ? `email a ${email.trim()}`
+          : data.sentSms
+          ? `SMS a ${phone.trim()}`
+          : 'creada (no se envió notificación)';
         Alert.alert(
-          'Quote Sent!',
-          `Invoice sent to ${email.trim() || phone.trim()}.\nStripe Invoice: ${data.invoiceId || 'created'}`,
+          'Quote enviada',
+          `Invoice ${data.number || data.id} enviada por ${channel}.\nMonto: $${data.amount || total}`,
         );
         router.back();
       } else {
-        Alert.alert('Error', data.error || 'Failed to send quote. Try again.');
+        Alert.alert('Error', data.error || 'No se pudo crear la invoice. Intenta de nuevo.');
       }
     } catch (err) {
-      Alert.alert('Error', 'Could not connect to server. Check your connection.');
+      Alert.alert('Error', 'No se pudo conectar al servidor. Revisa tu conexión.');
     } finally {
       setSendingQuote(false);
     }

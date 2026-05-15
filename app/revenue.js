@@ -49,7 +49,7 @@ const DATE_FILTERS = [
   { id: 'this_week', label: 'This Week' },
   { id: 'this_month', label: 'This Month' },
   { id: 'last_month', label: 'Last Month' },
-  { id: 'all', label: 'All Time' },
+  { id: 'all', label: 'Lifetime' },
   { id: 'custom', label: 'Custom' },
 ];
 
@@ -88,6 +88,11 @@ export default function RevenueScreen() {
   const [customEnd, setCustomEnd] = useState('');
   const [showStartCal, setShowStartCal] = useState(false);
   const [showEndCal, setShowEndCal] = useState(false);
+  // 'service' = filter/sum by deliveryDate (when the dumpster lands at the
+  // job) — answers "how much did we deliver this month?". 'cash' = filter
+  // by paidAt + sum paidAmount (when the money landed) — answers "how much
+  // did we collect this month?", matches Stripe deposits.
+  const [basis, setBasis] = useState('service');
 
   const now = new Date();
   const currentYM = now.toISOString().slice(0, 7);
@@ -95,23 +100,40 @@ export default function RevenueScreen() {
   const CLOSED_STATUSES = ['completed', 'delivered', 'picked_up', 'pickup_ready', 'dumping', 'ready_for_pickup'];
   const EXPECTED_STATUSES = ['scheduled', 'in_transit', 'on_site', 'quote_sent'];
 
+  // Which date field & money field we filter/sum by depends on the basis.
+  // Cash basis uses paidAt + paidAmount; Service basis uses deliveryDate + total.
+  const dateField = basis === 'cash' ? 'paidAt' : 'deliveryDate';
+  const amountField = basis === 'cash' ? 'paidAmount' : 'total';
+
   const stats = useMemo(() => {
     const range = dateFilter === 'custom'
       ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
       : getDateRange(dateFilter);
 
-    const inRange = bookings.filter(
-      (b) => b.status !== 'cancelled' && (b.deliveryDate || '') >= range.start && (b.deliveryDate || '') <= range.end
-    );
-    const closed = inRange.filter((b) => CLOSED_STATUSES.includes(b.status));
-    const expected = inRange.filter((b) => EXPECTED_STATUSES.includes(b.status));
+    const inRange = bookings.filter((b) => {
+      if (b.status === 'cancelled') return false;
+      const d = b[dateField] || '';
+      // Cash basis excludes anything we haven't been paid for yet.
+      if (basis === 'cash' && !d) return false;
+      return d >= range.start && d <= range.end;
+    });
 
-    const closedRevenue = closed.reduce((s, b) => s + (b.total || 0), 0);
-    const expectedRevenue = expected.reduce((s, b) => s + (b.total || 0), 0);
+    // For cash basis, "closed" = anything we got paid for (paidAt set).
+    // For service basis we keep the existing status-bucket logic.
+    const closed = basis === 'cash'
+      ? inRange.filter((b) => !!b.paidAt)
+      : inRange.filter((b) => CLOSED_STATUSES.includes(b.status));
+    const expected = basis === 'cash'
+      ? [] // cash basis can't have "expected" by definition
+      : inRange.filter((b) => EXPECTED_STATUSES.includes(b.status));
+
+    const sumAmt = (arr) => arr.reduce((s, b) => s + (b[amountField] || 0), 0);
+    const closedRevenue = sumAmt(closed);
+    const expectedRevenue = sumAmt(expected);
     const totalRevenue = closedRevenue + expectedRevenue;
 
-    const thisMonth = inRange.filter((b) => (b.deliveryDate || '').startsWith(currentYM));
-    const monthRevenue = thisMonth.reduce((s, b) => s + (b.total || 0), 0);
+    const thisMonth = inRange.filter((b) => (b[dateField] || '').startsWith(currentYM));
+    const monthRevenue = sumAmt(thisMonth);
     const avgValue = inRange.length ? totalRevenue / inRange.length : 0;
 
     // Revenue by sales rep — split closed vs expected (generatedBy field, fallback to source)
@@ -119,7 +141,7 @@ export default function RevenueScreen() {
     const addToRep = (b, bucket) => {
       const rep = b.generatedBy || b.source || 'unknown';
       if (!repMap[rep]) repMap[rep] = { name: rep, closed: 0, expected: 0, count: 0 };
-      repMap[rep][bucket] += b.total || 0;
+      repMap[rep][bucket] += b[amountField] || 0;
       repMap[rep].count += 1;
     };
     closed.forEach((b) => addToRep(b, 'closed'));
@@ -133,7 +155,7 @@ export default function RevenueScreen() {
     inRange.forEach((b) => {
       const svc = b.serviceType || 'Other';
       if (!svcMap[svc]) svcMap[svc] = { name: svc, revenue: 0, count: 0 };
-      svcMap[svc].revenue += b.total || 0;
+      svcMap[svc].revenue += b[amountField] || 0;
       svcMap[svc].count += 1;
     });
     const byService = Object.values(svcMap).sort((a, b) => b.revenue - a.revenue);
@@ -143,7 +165,7 @@ export default function RevenueScreen() {
     inRange.forEach((b) => {
       const sz = b.dumpsterSize || 'Unknown';
       if (!sizeMap[sz]) sizeMap[sz] = { name: sz, revenue: 0, count: 0 };
-      sizeMap[sz].revenue += b.total || 0;
+      sizeMap[sz].revenue += b[amountField] || 0;
       sizeMap[sz].count += 1;
     });
     const bySize = Object.values(sizeMap).sort((a, b) => b.revenue - a.revenue);
@@ -153,7 +175,7 @@ export default function RevenueScreen() {
     inRange.forEach((b) => {
       const name = b.customerName || 'Unknown';
       if (!custMap[name]) custMap[name] = { name, revenue: 0, count: 0 };
-      custMap[name].revenue += b.total || 0;
+      custMap[name].revenue += b[amountField] || 0;
       custMap[name].count += 1;
     });
     const topCustomers = Object.values(custMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
@@ -161,8 +183,8 @@ export default function RevenueScreen() {
     // Monthly trend — revenue per week of current month
     const weekMap = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     thisMonth.forEach((b) => {
-      const w = getWeekOfMonth(b.deliveryDate);
-      weekMap[w] = (weekMap[w] || 0) + (b.total || 0);
+      const w = getWeekOfMonth(b[dateField]);
+      weekMap[w] = (weekMap[w] || 0) + (b[amountField] || 0);
     });
     // Only include weeks that exist (up to 5)
     const weeklyTrend = [];
@@ -186,7 +208,7 @@ export default function RevenueScreen() {
       topCustomers,
       weeklyTrend,
     };
-  }, [bookings, currentYM, dateFilter, customStart, customEnd]);
+  }, [bookings, currentYM, dateFilter, customStart, customEnd, basis, dateField, amountField]);
 
   const maxRepRevenue = stats.byRep.length ? stats.byRep[0].revenue : 1;
   const maxSvcRevenue = stats.byService.length ? stats.byService[0].revenue : 1;
@@ -215,6 +237,34 @@ export default function RevenueScreen() {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
+        {/* Basis toggle — Service (when delivered) vs Cash (when paid).
+            Service is the default; Cash matches Stripe deposits. */}
+        <View style={{ flexDirection: 'row', backgroundColor: '#F0F0F0', borderRadius: 9999, padding: 4, marginBottom: 12, alignSelf: 'flex-start' }}>
+          {[
+            { id: 'service', label: 'By Delivery', hint: 'When the dumpster ships' },
+            { id: 'cash', label: 'By Payment', hint: 'When the cash landed' },
+          ].map((opt) => (
+            <TouchableOpacity
+              key={opt.id}
+              onPress={() => setBasis(opt.id)}
+              style={{
+                paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
+                backgroundColor: basis === opt.id ? '#FFFFFF' : 'transparent',
+              }}
+            >
+              <Text style={{
+                color: basis === opt.id ? '#FF8C00' : '#666',
+                fontSize: 13, fontWeight: basis === opt.id ? '700' : '500',
+              }}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={{ fontSize: 11, color: '#888', marginBottom: 14, marginLeft: 4 }}>
+          {basis === 'cash'
+            ? 'Showing revenue by when payment hit (matches Stripe).'
+            : 'Showing revenue by when service was delivered (operational view).'}
+        </Text>
+
         {/* Date Filter */}
         <View style={{ marginBottom: 16 }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>

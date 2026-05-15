@@ -128,7 +128,10 @@ export default function ScheduleScreen() {
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
   const GUTTER_WIDTH = 44;
-  const COL_WIDTH = Math.floor((screenWidth - 32 - GUTTER_WIDTH) / 7);
+  // Fixed column width so each day cell is wide enough for readable text.
+  // On phones (~360-400px) this gives ~3-4 visible days; users swipe horizontally
+  // to see the rest of the week. Mirrors Google Calendar mobile UX.
+  const COL_WIDTH = 96;
   const HEADER_HEIGHT = 140; // header + nav + day headers
   const TAB_BAR_HEIGHT = 72;
   const availableHeight = screenHeight - HEADER_HEIGHT - TAB_BAR_HEIGHT - 40;
@@ -136,85 +139,60 @@ export default function ScheduleScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
-        {/* Header */}
-        <View style={{ marginBottom: 24 }}>
-          <Text style={{ fontSize: 36, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5, marginBottom: 4 }}>
+      {/* Compact header bar — date range + week nav + new booking button on one
+          row so the calendar grid has the most vertical space possible (per
+          Asaí 2026-04-30: "se sigue viendo vacío" because heavy header pushed
+          calendar off-screen). */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <TouchableOpacity onPress={() => setWeekOffset(weekOffset - 1)} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: COLORS.surface_container_low }}>
+          <Text style={{ color: COLORS.on_surface, fontSize: 18 }}>{'<'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setWeekOffset(0)} style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.on_surface }} numberOfLines={1}>
             {formatDateRange(weekDays)}
           </Text>
-          <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 10, color: COLORS.on_surface_variant }}>
-            FISCAL YEAR 2026 {'\u2022'} LOGISTICS QUEUE
-          </Text>
-        </View>
-
-        {/* Navigation */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface_container_low, borderRadius: 12, padding: 6, marginBottom: 24, alignSelf: 'flex-start' }}>
-          <TouchableOpacity
-            onPress={() => setWeekOffset(weekOffset - 1)}
-            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
-          >
-            <Text style={{ color: COLORS.on_surface, fontSize: 20 }}>{'<'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setWeekOffset(0)}
-            style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: COLORS.surface_container_highest, borderRadius: 8, marginHorizontal: 4 }}
-          >
-            <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 10, color: COLORS.primary }}>
-              Today
+          {weekOffset !== 0 && (
+            <Text style={{ fontSize: 10, fontWeight: '700', color: COLORS.primary, marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
+              Tap for today
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setWeekOffset(weekOffset + 1)}
-            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
-          >
-            <Text style={{ color: COLORS.on_surface, fontSize: 20 }}>{'>'}</Text>
-          </TouchableOpacity>
-        </View>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setWeekOffset(weekOffset + 1)} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: COLORS.surface_container_low }}>
+          <Text style={{ color: COLORS.on_surface, fontSize: 18 }}>{'>'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push('/booking/create')}
+          style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: COLORS.primary_container }}
+        >
+          <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 22 }}>+</Text>
+        </TouchableOpacity>
+      </View>
 
-        {/* Summary Row */}
-        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
-          <View style={{ flex: 1, backgroundColor: COLORS.surface_container_high, padding: 14, borderRadius: 12 }}>
-            <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant, marginBottom: 4 }}>
-              Weekly Capacity
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
-              <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 }}>
-                {utilization}%
-              </Text>
-              <Text style={{ color: COLORS.secondary_container, fontSize: 11, marginBottom: 2 }}>
-                Util.
-              </Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}>
+
+        {/* Calendar Grid \u2014 horizontal scroll for day columns so each cell can
+            be wide enough for readable text (96px). Time gutter stays fixed
+            on the left so users always see the hour labels. */}
+        <View style={{ backgroundColor: COLORS.surface_container_low, borderRadius: 16, overflow: 'hidden', flexDirection: 'row' }}>
+          {/* Fixed time gutter on the left */}
+          <View>
+            {/* Header spacer to match day-header row height */}
+            <View style={{ width: GUTTER_WIDTH, height: 56, backgroundColor: COLORS.surface_container_high, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: COLORS.secondary_container, fontSize: 16 }}>{'\u23F1'}</Text>
             </View>
-            <View style={{ height: 4, width: '100%', backgroundColor: COLORS.surface_container_lowest, borderRadius: 9999, overflow: 'hidden', marginTop: 6 }}>
-              <View style={{ height: '100%', width: `${Math.min(utilization, 100)}%`, backgroundColor: COLORS.primary, borderRadius: 9999 }} />
-            </View>
-          </View>
-          <TouchableOpacity
-            onPress={() => router.push('/booking/create')}
-            style={{ flex: 1, backgroundColor: COLORS.surface_container_low, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,183,125,0.2)', justifyContent: 'center' }}
-          >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View>
-                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.primary, marginBottom: 2 }}>
-                  Quick Action
-                </Text>
-                <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5 }}>
-                  New Booking
+            {HOURS.map((slot) => (
+              <View key={'gutter-' + slot.hour} style={{ width: GUTTER_WIDTH, minHeight: ROW_HEIGHT, justifyContent: 'flex-start', paddingTop: 12, paddingRight: 8, alignItems: 'flex-end' }}>
+                <Text style={{ fontWeight: '600', letterSpacing: 1, fontSize: 9, color: COLORS.secondary_container }}>
+                  {slot.label}
                 </Text>
               </View>
-              <Text style={{ fontSize: 24, color: COLORS.primary }}>+</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Calendar Grid */}
-        <View style={{ backgroundColor: COLORS.surface_container_low, borderRadius: 16, overflow: 'hidden' }}>
+            ))}
+          </View>
+          {/* Scrollable day columns */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 8 }}>
             <View>
               {/* Day Headers */}
-              <View style={{ flexDirection: 'row', backgroundColor: COLORS.surface_container_high }}>
-                <View style={{ width: GUTTER_WIDTH, alignItems: 'center', justifyContent: 'center', padding: 8 }}>
-                  <Text style={{ color: COLORS.secondary_container, fontSize: 16 }}>{'\u23F1'}</Text>
-                </View>
+              <View style={{ flexDirection: 'row', backgroundColor: COLORS.surface_container_high, height: 56 }}>
                 {weekDays.map((day, idx) => {
                   const isToday = isSameDay(day, today);
                   return (
@@ -250,15 +228,9 @@ export default function ScheduleScreen() {
                 })}
               </View>
 
-              {/* Time Rows */}
+              {/* Time Rows — gutter is now rendered separately on the left */}
               {HOURS.map((slot) => (
                 <View key={slot.hour} style={{ flexDirection: 'row', minHeight: ROW_HEIGHT }}>
-                  {/* Time Gutter */}
-                  <View style={{ width: GUTTER_WIDTH, justifyContent: 'flex-start', paddingTop: 12, paddingRight: 8, alignItems: 'flex-end' }}>
-                    <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.secondary_container }}>
-                      {slot.label}
-                    </Text>
-                  </View>
                   {/* Day Columns */}
                   {weekDays.map((day, dayIdx) => {
                     const isToday = isSameDay(day, today);
@@ -293,21 +265,25 @@ export default function ScheduleScreen() {
                                 marginBottom: 4,
                               }}
                             >
-                              <Text style={{
-                                fontSize: 9,
-                                fontWeight: '700',
-                                color: blockColor,
-                                textTransform: 'uppercase',
-                                letterSpacing: 0.5,
-                                marginBottom: 2,
-                              }}>
-                                {isPickup ? 'PICKUP' : (booking.status === 'in_transit' ? 'In Transit' : booking.status)}
-                              </Text>
-                              <Text style={{ fontWeight: '700', fontSize: 12, color: COLORS.on_surface }} numberOfLines={1}>
+                              {/* Compact card: dot + name + size on one line each.
+                                  Avoids the letter-by-letter text break Asaí showed. */}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: blockColor }} />
+                                <Text style={{
+                                  fontSize: 8,
+                                  fontWeight: '700',
+                                  color: blockColor,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.3,
+                                }} numberOfLines={1}>
+                                  {isPickup ? 'PICKUP' : (booking.status === 'in_transit' ? 'In transit' : (booking.status || '').replace('_', ' '))}
+                                </Text>
+                              </View>
+                              <Text style={{ fontWeight: '700', fontSize: 11, color: COLORS.on_surface, lineHeight: 13 }} numberOfLines={1}>
                                 {booking.customerName}
                               </Text>
-                              <Text style={{ fontSize: 10, color: COLORS.on_surface_variant, marginTop: 2 }} numberOfLines={1}>
-                                {booking.dumpsterSize} {isPickup ? 'Pickup' : 'Delivery'}
+                              <Text style={{ fontSize: 9, color: COLORS.on_surface_variant }} numberOfLines={1}>
+                                {booking.dumpsterSize}
                               </Text>
                             </TouchableOpacity>
                           );
@@ -318,6 +294,7 @@ export default function ScheduleScreen() {
                 </View>
               ))}
             </View>
+          </ScrollView>
         </View>
 
       </ScrollView>

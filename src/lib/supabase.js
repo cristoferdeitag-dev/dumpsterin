@@ -239,6 +239,14 @@ function mapBookingFromDB(b) {
     billingAddress: b.billing_address || null,
     authorizedCharges: !!b.authorized_charges,
     source: b.source || 'phone',
+    // Stripe sync fields — needed so Revenue can switch between cash basis
+    // (paid_at) and service basis (scheduled_date). paid_at is the ISO
+    // timestamp Stripe marked the invoice/charge as paid; paid_amount is
+    // the actual amount received (may differ from total on partial pay).
+    paidAt: b.paid_at ? b.paid_at.slice(0, 10) : '',
+    paidAmount: parseFloat(b.paid_amount) || 0,
+    paymentStatus: b.payment_status || '',
+    stripeInvoiceId: b.stripe_invoice_id || null,
     // Prefer the editable DB column if set; fall back to the legacy hardcoded
     // map for older bookings that haven't been re-attributed in the UI yet.
     generatedBy: b.sales_rep || _generatedByMap[b.booking_number] || 'asai',

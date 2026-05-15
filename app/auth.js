@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, SafeAreaView,
-  StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  View, Text, TouchableOpacity, SafeAreaView,
+  StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/lib/supabase';
 
 const C = {
@@ -21,184 +19,115 @@ const C = {
 };
 
 export default function AuthScreen() {
-  const router = useRouter();
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isLogin = mode === 'login';
-
-  const submit = async () => {
-    if (!email || !password) {
-      Alert.alert('Campos requeridos', 'Ingresa tu email y contraseña');
-      return;
-    }
-    if (!isLogin && password.length < 8) {
-      Alert.alert('Contraseña muy corta', 'Debe tener al menos 8 caracteres');
-      return;
-    }
-
+  const handleGoogle = async () => {
     setLoading(true);
     try {
-      if (isLogin) {
-        const { error } = await signIn({ email, password });
-        if (error) {
-          Alert.alert('Error al iniciar sesión', error.message);
-          setLoading(false);
-          return;
-        }
-        // Don't navigate manually — RouteGuard will route based on auth state
-      } else {
-        const { user, error } = await signUp({ email, password, fullName });
-        if (error) {
-          Alert.alert('Error al crear cuenta', error.message);
-          setLoading(false);
-          return;
-        }
-        // Auto-confirm is on, so session is set. RouteGuard will push to /onboarding
-        // Fallback: if for some reason no session yet, attempt signIn
-        if (!user) {
-          await signIn({ email, password });
-        }
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+          scopes: 'openid email profile https://www.googleapis.com/auth/calendar',
+        },
+      });
+      if (error) {
+        Alert.alert('Google Sign-In', error.message || 'Could not start Google sign-in. Please try again.');
+        setLoading(false);
       }
-      // Keep loading=true; RouteGuard will transition us. Fallback in 3s if not.
-      setTimeout(() => setLoading(false), 3000);
+      // RouteGuard handles navigation after auth state changes
     } catch (e) {
-      Alert.alert('Error inesperado', e.message || 'Intenta de nuevo');
+      Alert.alert('Unexpected error', e.message || 'Try again');
       setLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <View style={styles.content}>
-          <View style={styles.logo}>
-            <Ionicons name="cube" size={48} color={C.primaryDark} />
-            <Text style={styles.brand}>Dumpsterin</Text>
-          </View>
+      <View style={styles.content}>
+        <View style={styles.logo}>
+          <Ionicons name="cube" size={56} color={C.primaryDark} />
+          <Text style={styles.brand}>Dumpsterin</Text>
+          <Text style={styles.tagline}>The operating system for dumpster rentals</Text>
+        </View>
 
-          <View style={styles.tabs}>
-            <TouchableOpacity
-              style={[styles.tab, isLogin && styles.tabActive]}
-              onPress={() => setMode('login')}
-            >
-              <Text style={[styles.tabText, isLogin && styles.tabTextActive]}>Iniciar sesión</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, !isLogin && styles.tabActive]}
-              onPress={() => setMode('signup')}
-            >
-              <Text style={[styles.tabText, !isLogin && styles.tabTextActive]}>Crear cuenta</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.card}>
+          <Text style={styles.heading}>Sign in</Text>
+          <Text style={styles.subheading}>
+            Use your Google account to sign in or create a new business in seconds.
+          </Text>
 
-          <View style={styles.form}>
-            {!isLogin && (
-              <View>
-                <Text style={styles.label}>Tu nombre</Text>
-                <TextInput
-                  style={styles.input}
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholder="Ej: John Smith"
-                  placeholderTextColor={C.textLight}
-                  autoCapitalize="words"
-                />
-              </View>
+          <TouchableOpacity
+            style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
+            onPress={handleGoogle}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color={C.text} />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={22} color="#4285F4" />
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </>
             )}
-            <View>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="tu@email.com"
-                placeholderTextColor={C.textLight}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
+          </TouchableOpacity>
+
+          <Text style={styles.hint}>
+            By continuing, you agree to share your name and email with Dumpsterin so we can set up your account. Calendar access is requested so your bookings sync automatically.
+          </Text>
+
+          <View style={styles.steps}>
+            <View style={styles.step}>
+              <View style={styles.stepNum}><Text style={styles.stepNumText}>1</Text></View>
+              <Text style={styles.stepText}>Sign in with Google</Text>
             </View>
-            <View>
-              <Text style={styles.label}>Contraseña</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder={isLogin ? 'Tu contraseña' : 'Mínimo 8 caracteres'}
-                placeholderTextColor={C.textLight}
-                secureTextEntry
-                autoCapitalize="none"
-              />
+            <View style={styles.step}>
+              <View style={styles.stepNum}><Text style={styles.stepNumText}>2</Text></View>
+              <Text style={styles.stepText}>Set up your business (≈5 min)</Text>
             </View>
-
-            <TouchableOpacity style={styles.submitBtn} onPress={submit} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <>
-                  <Text style={styles.submitText}>{isLogin ? 'Entrar' : 'Crear cuenta'}</Text>
-                  <Ionicons name="arrow-forward" size={18} color="white" />
-                </>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o</Text>
-              <View style={styles.dividerLine} />
+            <View style={styles.step}>
+              <View style={styles.stepNum}><Text style={styles.stepNumText}>3</Text></View>
+              <Text style={styles.stepText}>Start receiving and managing bookings</Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.googleBtn}
-              onPress={async () => {
-                const { error } = await supabase.auth.signInWithOAuth({
-                  provider: 'google',
-                  options: { redirectTo: window.location.origin },
-                });
-                if (error) Alert.alert('Google Sign-In', error.message || 'Google aún no está configurado. Usa email/password.');
-              }}
-              disabled={loading}
-            >
-              <Ionicons name="logo-google" size={20} color="#4285F4" />
-              <Text style={styles.googleText}>Continuar con Google</Text>
-            </TouchableOpacity>
-
-            {!isLogin && (
-              <Text style={styles.hint}>
-                Después de crear tu cuenta te pedirá que configures tu empresa (toma ~5 minutos).
-              </Text>
-            )}
           </View>
         </View>
-      </KeyboardAvoidingView>
+
+        <Text style={styles.footer}>
+          Need help? Email{' '}
+          <Text style={styles.footerLink}>support@dumpsterin.com</Text>
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  content: { flex: 1, padding: 24, justifyContent: 'center' },
-  logo: { alignItems: 'center', marginBottom: 40 },
-  brand: { fontSize: 28, fontWeight: '700', color: C.text, marginTop: 8 },
-  tabs: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: 12, padding: 4, marginBottom: 24 },
-  tab: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
-  tabActive: { backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  tabText: { color: C.textMuted, fontWeight: '500' },
-  tabTextActive: { color: C.text, fontWeight: '600' },
-  form: { gap: 14 },
-  label: { fontSize: 14, fontWeight: '500', color: C.text, marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, fontSize: 15, backgroundColor: 'white', color: C.text },
-  submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.primaryDark, padding: 16, borderRadius: 10, marginTop: 10 },
-  submitText: { color: 'white', fontWeight: '600', fontSize: 16 },
-  hint: { color: C.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4, lineHeight: 18 },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 4 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
-  dividerText: { color: C.textLight, fontSize: 13 },
-  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: 'white' },
-  googleText: { color: C.text, fontWeight: '500', fontSize: 15 },
+  content: { flex: 1, padding: 24, justifyContent: 'center', maxWidth: 480, width: '100%', alignSelf: 'center' },
+  logo: { alignItems: 'center', marginBottom: 32 },
+  brand: { fontSize: 32, fontWeight: '700', color: C.text, marginTop: 12, letterSpacing: -0.5 },
+  tagline: { fontSize: 14, color: C.textMuted, marginTop: 6, textAlign: 'center' },
+  card: { backgroundColor: C.surface, borderRadius: 16, padding: 28, gap: 16 },
+  heading: { fontSize: 22, fontWeight: '700', color: C.text },
+  subheading: { fontSize: 14, color: C.textMuted, lineHeight: 20 },
+  googleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 12, paddingVertical: 16, paddingHorizontal: 20,
+    borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    backgroundColor: 'white',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    marginTop: 4,
+  },
+  googleBtnDisabled: { opacity: 0.6 },
+  googleText: { color: C.text, fontWeight: '600', fontSize: 16 },
+  hint: { color: C.textMuted, fontSize: 12, lineHeight: 18, marginTop: 4 },
+  steps: { marginTop: 12, gap: 10 },
+  step: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+  stepNumText: { color: 'white', fontWeight: '700', fontSize: 13 },
+  stepText: { color: C.text, fontSize: 14 },
+  footer: { textAlign: 'center', color: C.textMuted, fontSize: 13, marginTop: 24 },
+  footerLink: { color: C.primaryDark, fontWeight: '500' },
 });

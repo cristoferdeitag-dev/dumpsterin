@@ -51,6 +51,8 @@ export default function InventoryScreen() {
   const { state, dispatch } = useApp();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  // Sections collapsed by default. User taps a size header to expand.
+  const [expandedSize, setExpandedSize] = useState(null);
 
   const counts = useMemo(() => {
     let available = 0, deployed = 0, maintenance = 0;
@@ -86,6 +88,46 @@ export default function InventoryScreen() {
     dispatch({ type: 'UPDATE_DUMPSTER', payload: { id: dumpsterId, status: newStatus } });
   }
 
+  // Compact row: dumpster id + status badge + linked booking shortcut.
+  // No manual status toggle here — status flips automatically when bookings
+  // change state (per Asaí: "no deberias poder cambiarlo manualmente").
+  function renderDumpsterRow(dumpster) {
+    const statusColor = getStatusColor(dumpster.status);
+    const linkedBooking = getLinkedBooking(dumpster);
+    const statusLabel = dumpster.status === 'deployed' ? 'Delivered' : dumpster.status.charAt(0).toUpperCase() + dumpster.status.slice(1);
+    return (
+      <TouchableOpacity
+        key={dumpster.id}
+        onPress={() => linkedBooking && router.push(`/booking/${linkedBooking.id}`)}
+        activeOpacity={linkedBooking ? 0.7 : 1}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 12,
+          paddingHorizontal: 14,
+          backgroundColor: COLORS.surface_container_low,
+          borderRadius: 10,
+          marginBottom: 8,
+          gap: 12,
+        }}
+      >
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
+        <Text style={{ fontWeight: '700', fontSize: 14, color: COLORS.on_surface, flex: 1 }} numberOfLines={1}>
+          {dumpster.id}
+        </Text>
+        <View style={{ paddingHorizontal: 10, paddingVertical: 3, borderRadius: 9999, backgroundColor: statusColor === COLORS.primary ? 'rgba(255,183,125,0.15)' : statusColor === COLORS.tertiary ? 'rgba(133,207,255,0.15)' : 'rgba(255,180,171,0.15)' }}>
+          <Text style={{ fontSize: 9, fontWeight: '700', color: statusColor, textTransform: 'uppercase', letterSpacing: 1 }}>
+            {statusLabel}
+          </Text>
+        </View>
+        {linkedBooking && (
+          <Text style={{ color: COLORS.tertiary, fontSize: 14 }}>›</Text>
+        )}
+      </TouchableOpacity>
+    );
+  }
+
+  // KEPT for now in case we need full-card view elsewhere. Not used in main list.
   function renderDumpsterCard({ item: dumpster }) {
     const statusColor = getStatusColor(dumpster.status);
     const linkedBooking = getLinkedBooking(dumpster);
@@ -203,69 +245,56 @@ export default function InventoryScreen() {
     );
   }
 
+  // Group filtered dumpsters by size for the collapsible list below.
+  const grouped = useMemo(() => {
+    const out = { '10yd': [], '20yd': [], '30yd': [] };
+    for (const d of filteredDumpsters) {
+      if (out[d.size]) out[d.size].push(d);
+    }
+    // Sort each group by id so the same dumpster stays in the same spot
+    for (const k of Object.keys(out)) out[k].sort((a, b) => a.id.localeCompare(b.id));
+    return out;
+  }, [filteredDumpsters]);
+
+  const totalDumpsters = state.dumpsters.length;
+
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <FlatList
-        data={filteredDumpsters}
+        data={[]}  // empty — content lives in ListHeaderComponent for the new compact grouped layout
         keyExtractor={(item) => item.id}
-        renderItem={renderDumpsterCard}
+        renderItem={() => null}
         contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
         ListHeaderComponent={
           <View>
-            {/* Title */}
-            <Text style={{ fontSize: 32, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5, marginBottom: 16 }}>
-              Inventory Mgmt
-            </Text>
-
-            {/* Summary Chips */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
-              {/* Available */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
-                <Text style={{ fontSize: 16, color: COLORS.primary }}>{'\u2713'}</Text>
-                <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 16 }}>{counts.available}</Text>
-                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Available</Text>
-              </View>
-              {/* Delivered */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
-                <Text style={{ fontSize: 16, color: COLORS.tertiary }}>{'\u{1F69B}'}</Text>
-                <Text style={{ color: COLORS.tertiary, fontWeight: '700', fontSize: 16 }}>{counts.deployed}</Text>
-                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Delivered</Text>
-              </View>
-              {/* Maintenance */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9999 }}>
-                <Text style={{ fontSize: 16, color: COLORS.error }}>{'\u{1F527}'}</Text>
-                <Text style={{ color: COLORS.error, fontWeight: '700', fontSize: 16 }}>{counts.maintenance}</Text>
-                <Text style={{ fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Maintenance</Text>
-              </View>
+            {/* Title + total */}
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
+              <Text style={{ fontSize: 32, fontWeight: '800', color: COLORS.on_surface, letterSpacing: -0.5 }}>
+                Inventory
+              </Text>
+              <Text style={{ fontSize: 14, color: COLORS.on_surface_variant, fontWeight: '600' }}>
+                {totalDumpsters} dumpsters
+              </Text>
             </View>
 
-            {/* Size Breakdown */}
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-              {['10yd', '20yd', '30yd'].map((size) => {
-                const s = counts.sizes[size] || { total: 0, available: 0 };
-                const delivered = s.total - s.available;
-                const label = size.replace('yd', ' YARD');
-                const pct = s.total > 0 ? (s.available / s.total) * 100 : 0;
-                return (
-                  <View key={size} style={{ flex: 1, backgroundColor: COLORS.surface_container_low, borderRadius: 14, padding: 14 }}>
-                    <Text style={{ color: COLORS.on_surface, fontWeight: '900', fontSize: 16, letterSpacing: 1, textAlign: 'center', marginBottom: 10 }}>
-                      {label}
-                    </Text>
-                    <Text style={{ color: COLORS.on_surface_variant, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>
-                      Total: <Text style={{ color: COLORS.on_surface, fontWeight: '800', fontSize: 18 }}>{s.total}</Text>
-                    </Text>
-                    <Text style={{ color: 'rgba(76,217,100,0.9)', fontSize: 11, fontWeight: '600', marginBottom: 2 }}>
-                      Available: <Text style={{ fontWeight: '800', fontSize: 18 }}>{s.available}</Text>
-                    </Text>
-                    <Text style={{ color: COLORS.tertiary, fontSize: 11, fontWeight: '600', marginBottom: 8 }}>
-                      Delivered: <Text style={{ fontWeight: '800', fontSize: 18 }}>{delivered}</Text>
-                    </Text>
-                    <View style={{ width: '100%', height: 5, backgroundColor: COLORS.surface_container_lowest, borderRadius: 3, overflow: 'hidden' }}>
-                      <View style={{ width: `${pct}%`, height: '100%', backgroundColor: s.available > 0 ? '#4cd964' : COLORS.error, borderRadius: 3 }} />
-                    </View>
-                  </View>
-                );
-              })}
+            {/* Summary Chips \u2014 equal-flex row so all 3 fit on one line, with
+                smaller copy so they don't wrap on narrow phones (Asa\u00ed 2026-04-30). */}
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+              {/* Available */}
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 8, paddingVertical: 10, borderRadius: 9999 }}>
+                <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 15 }}>{counts.available}</Text>
+                <Text style={{ fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Available</Text>
+              </View>
+              {/* Delivered */}
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 8, paddingVertical: 10, borderRadius: 9999 }}>
+                <Text style={{ color: COLORS.tertiary, fontWeight: '700', fontSize: 15 }}>{counts.deployed}</Text>
+                <Text style={{ fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Delivered</Text>
+              </View>
+              {/* Maintenance */}
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.surface_container_low, paddingHorizontal: 8, paddingVertical: 10, borderRadius: 9999 }}>
+                <Text style={{ color: COLORS.error, fontWeight: '700', fontSize: 15 }}>{counts.maintenance}</Text>
+                <Text style={{ fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', fontSize: 9, color: COLORS.on_surface_variant }}>Maintenance</Text>
+              </View>
             </View>
 
             {/* Search */}
@@ -290,6 +319,51 @@ export default function InventoryScreen() {
                 />
               </View>
             </View>
+
+            {/* Collapsible groups by size — tap to expand the dumpster list. */}
+            {['10yd', '20yd', '30yd'].map((size) => {
+              const list = grouped[size] || [];
+              const sizeStats = counts.sizes[size] || { total: 0, available: 0 };
+              const delivered = sizeStats.total - sizeStats.available;
+              const isExpanded = expandedSize === size;
+              const label = size.replace('yd', '-Yard');
+              return (
+                <View key={size} style={{ marginBottom: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => setExpandedSize(isExpanded ? null : size)}
+                    activeOpacity={0.7}
+                    style={{
+                      backgroundColor: COLORS.surface_container_high,
+                      borderRadius: 12,
+                      paddingVertical: 14,
+                      paddingHorizontal: 16,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.on_surface, flex: 1 }}>
+                      {label} <Text style={{ fontSize: 13, color: COLORS.on_surface_variant, fontWeight: '600' }}>({sizeStats.total})</Text>
+                    </Text>
+                    {/* Mini status counts */}
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: '700' }}>{sizeStats.available} avail</Text>
+                      <Text style={{ fontSize: 11, color: COLORS.tertiary, fontWeight: '700' }}>{delivered} deliv</Text>
+                    </View>
+                    <Text style={{ fontSize: 14, color: COLORS.on_surface_variant }}>
+                      {isExpanded ? '▾' : '▸'}
+                    </Text>
+                  </TouchableOpacity>
+                  {isExpanded && (
+                    <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
+                      {list.length === 0
+                        ? <Text style={{ color: COLORS.on_surface_variant, fontSize: 12, paddingVertical: 8 }}>No dumpsters</Text>
+                        : list.map(renderDumpsterRow)}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
         }
       />

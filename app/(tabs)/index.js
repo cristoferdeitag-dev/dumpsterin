@@ -74,6 +74,9 @@ export default function HomeScreen() {
   const { bookings, dumpsters } = state;
   const [zipCode, setZipCode] = useState('');
   const [zipResult, setZipResult] = useState(null); // null, false, or city name string
+  // Hide/show toggle for the revenue figure on Home (Asaí 2026-04-30: bank-app
+  // pattern — useful in the field when looking at the screen with customers).
+  const [hideRevenue, setHideRevenue] = useState(false);
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -129,214 +132,134 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={{ marginBottom: 32 }}>
-          <Text style={{
-            color: '#1A1A1A',
-            fontSize: 32,
-            fontWeight: '800',
-            letterSpacing: -0.5,
-            marginBottom: 4,
-          }}>
-            Fleet Overview
-          </Text>
-          <Text style={{ color: '#666666', fontWeight: '500', fontSize: 14 }}>
-            Real-time logistics and revenue tracking
-          </Text>
-        </View>
-
-        {/* ZIP Code Search */}
-        <View style={{ backgroundColor: '#F7F7F7', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <Text style={{ color: '#666666', fontSize: 10, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>
-            Service Area Check
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8E8E8', borderRadius: 10, paddingHorizontal: 14 }}>
-              <Ionicons name="search" size={18} color="#999999" />
-              <TextInput
-                style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 10, color: '#1A1A1A', fontSize: 16 }}
-                value={zipCode}
-                onChangeText={(val) => {
-                  setZipCode(val.replace(/\D/g, '').slice(0, 5));
-                  if (val.length < 5) setZipResult(null);
-                }}
-                placeholder="Enter ZIP code..."
-                placeholderTextColor="#999999"
-                keyboardType="numeric"
-                maxLength={5}
-              />
-            </View>
-            <TouchableOpacity
-              onPress={() => {
-                if (zipCode.length === 5) {
-                  const city = SERVICE_ZIPS[zipCode];
-                  setZipResult(city ? city : false);
-                }
-              }}
-              style={{ backgroundColor: '#ff8c00', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
-            >
-              <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 14 }}>Check</Text>
-            </TouchableOpacity>
+        <View style={{ marginBottom: 32, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View>
+            <Text style={{
+              color: '#1A1A1A',
+              fontSize: 32,
+              fontWeight: '800',
+              letterSpacing: -0.5,
+              marginBottom: 4,
+            }}>
+              Fleet Overview
+            </Text>
+            <Text style={{ color: '#666666', fontWeight: '500', fontSize: 14 }}>
+              Real-time logistics and revenue tracking
+            </Text>
           </View>
-          {typeof zipResult === 'string' && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, backgroundColor: 'rgba(133,207,255,0.1)', padding: 10, borderRadius: 8 }}>
-              <Ionicons name="checkmark-circle" size={20} color="#85cfff" />
-              <Text style={{ color: '#85cfff', fontWeight: '700', fontSize: 14 }}>{zipCode} — {zipResult}, CA  ✅ We service this area!</Text>
-            </View>
-          )}
-          {zipResult === false && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, backgroundColor: 'rgba(255,180,171,0.1)', padding: 10, borderRadius: 8 }}>
-              <Ionicons name="close-circle" size={20} color="#ffb4ab" />
-              <Text style={{ color: '#ffb4ab', fontWeight: '700', fontSize: 14 }}>Outside service area</Text>
-            </View>
-          )}
+          {/* Notas shortcut — added 2026-04-30 per Asaí's request for a single
+              place to dump quick todos that today get lost in Telegram. */}
+          <TouchableOpacity
+            onPress={() => router.push('/notes')}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 9999,
+              backgroundColor: '#F7F7F7',
+              borderWidth: 1,
+              borderColor: '#E8E8E8',
+            }}
+          >
+            <Ionicons name="document-text-outline" size={16} color="#1A1A1A" />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>Notes</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Revenue Card */}
-        <TouchableOpacity
-          onPress={() => router.push('/revenue')}
-          activeOpacity={0.85}
-          style={{
+        {/* Service Area Check moved to the Map tab — Asaí 2026-04-30 */}
+
+        {/* Revenue Card — compact (Asaí 2026-04-30): smaller height, hide/show
+            eye toggle, tap-anywhere-else opens /revenue. The chevron makes the
+            tap-to-drill-down obvious. */}
+        <View style={{
           backgroundColor: '#F7F7F7',
           borderRadius: 12,
-          padding: 24,
-          marginBottom: 16,
-          minHeight: 200,
+          padding: 16,
+          marginBottom: 12,
           overflow: 'hidden',
           position: 'relative',
         }}>
-          {/* Orange glow */}
-          <View style={{
-            position: 'absolute',
-            right: -40,
-            top: -40,
-            width: 160,
-            height: 160,
-            borderRadius: 80,
-            backgroundColor: '#ff8c00',
-            opacity: 0.08,
-          }} />
-
-          <Text style={{
-            color: '#666666',
-            fontSize: 10,
-            fontWeight: '600',
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            marginBottom: 12,
-          }}>
-            Total Revenue
-          </Text>
-
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-            <Text style={{
-              color: '#ffb77d',
-              fontSize: 48,
-              fontWeight: '800',
-              letterSpacing: -1,
-            }}>
-              {formatCurrency(stats.totalRevenue)}
-            </Text>
-            <Text style={{ color: '#85cfff', fontWeight: '700', fontSize: 14 }}>
-              +{stats.revenueChange}%
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <TouchableOpacity
+              onPress={() => router.push('/revenue')}
+              activeOpacity={0.7}
+              style={{ flex: 1 }}
+            >
+              <Text style={{ color: '#666666', fontSize: 10, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
+                Total Revenue
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+                <Text style={{ color: '#ffb77d', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+                  {hideRevenue ? '••••••' : formatCurrency(stats.totalRevenue)}
+                </Text>
+                {!hideRevenue && (
+                  <Text style={{ color: '#85cfff', fontWeight: '700', fontSize: 12 }}>
+                    +{stats.revenueChange}%
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setHideRevenue((v) => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ padding: 4 }}
+            >
+              <Ionicons name={hideRevenue ? 'eye-off-outline' : 'eye-outline'} size={20} color="#999999" />
+            </TouchableOpacity>
           </View>
-
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
-            <View style={{
-              backgroundColor: '#E8E8E8',
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              borderRadius: 8,
-            }}>
-              <Text style={{
-                color: '#666666',
-                fontSize: 10,
-                fontWeight: '600',
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>
-                Active Bookings
-              </Text>
-              <Text style={{ color: '#1A1A1A', fontSize: 20, fontWeight: '800' }}>
-                {stats.activeCount}
-              </Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+            <View style={{ flex: 1, backgroundColor: '#E8E8E8', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+              <Text style={{ color: '#666666', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Active</Text>
+              <Text style={{ color: '#1A1A1A', fontSize: 16, fontWeight: '800', marginTop: 2 }}>{stats.activeCount}</Text>
             </View>
-            <View style={{
-              backgroundColor: '#E8E8E8',
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              borderRadius: 8,
-            }}>
-              <Text style={{
-                color: '#666666',
-                fontSize: 10,
-                fontWeight: '600',
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>
-                Completed
-              </Text>
-              <Text style={{ color: '#85cfff', fontSize: 20, fontWeight: '800' }}>
-                {stats.completedCount}
-              </Text>
+            <View style={{ flex: 1, backgroundColor: '#E8E8E8', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+              <Text style={{ color: '#666666', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Completed</Text>
+              <Text style={{ color: '#85cfff', fontSize: 16, fontWeight: '800', marginTop: 2 }}>{stats.completedCount}</Text>
             </View>
           </View>
-        </TouchableOpacity>
-
-        {/* Sales Rep Breakdown */}
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-          {Object.entries(stats.repRevenue || {}).sort((a, b) => b[1] - a[1]).map(([rep, rev]) => {
-            const displayName = rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep === 'phone' ? 'Asai (Phone)' : rep === 'website' ? 'Asai (Web)' : rep;
-            return (
-            <View key={rep} style={{ flex: 1, backgroundColor: '#F7F7F7', borderRadius: 12, padding: 14 }}>
-              <Text style={{ color: '#999999', fontSize: 10, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
-                {displayName}
-              </Text>
-              <Text style={{ color: '#FF8C00', fontSize: 20, fontWeight: '800' }}>
-                {formatCurrency(rev)}
-              </Text>
-            </View>
-          )})}
         </View>
 
-        {/* Fleet Readiness Card */}
+        {/* Sales Rep Breakdown — horizontal scroll keeps it compact and works
+            for any number of reps (Asaí 2026-04-30: support adding more
+            reps later without crowding the home screen). */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 16 }} style={{ marginBottom: 12, marginHorizontal: -16, paddingHorizontal: 16 }}>
+          {Object.entries(stats.repRevenue || {}).sort((a, b) => b[1] - a[1]).map(([rep, rev]) => {
+            const displayName = rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep === 'phone' ? 'Asai (Phone)' : rep === 'website' ? 'Web' : rep;
+            return (
+              <View key={rep} style={{ minWidth: 110, backgroundColor: '#F7F7F7', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
+                <Text style={{ color: '#999999', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>
+                  {displayName}
+                </Text>
+                <Text style={{ color: '#FF8C00', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
+                  {hideRevenue ? '••••' : formatCurrency(rev)}
+                </Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        {/* Fleet Status — Fleet Readiness + Live Unit Tracking merged into a
+            single compact card (Asaí 2026-04-30). Header + 3 status cells +
+            tappable row to open the map. */}
         <View style={{
           backgroundColor: '#EEEEEE',
           borderRadius: 12,
-          padding: 24,
-          marginBottom: 16,
+          padding: 16,
+          marginBottom: 12,
         }}>
-          <Text style={{
-            color: '#1A1A1A',
-            fontSize: 18,
-            fontWeight: '800',
-            letterSpacing: -0.5,
-            marginBottom: 20,
-          }}>
-            Fleet Readiness
-          </Text>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#85cfff' }} />
-              <Text style={{ color: '#1A1A1A', fontWeight: '500', fontSize: 14 }}>Available Units</Text>
-            </View>
-            <Text style={{ color: '#1A1A1A', fontSize: 22, fontWeight: '800' }}>
-              {stats.availableUnits}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <Text style={{ color: '#1A1A1A', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 }}>
+              Fleet Status
+            </Text>
+            <Text style={{ color: '#666666', fontSize: 11 }}>
+              {stats.deployedUnits} live in service area
             </Text>
           </View>
 
           {/* Progress bar */}
-          <View style={{
-            width: '100%',
-            height: 6,
-            backgroundColor: '#F0F0F0',
-            borderRadius: 3,
-            overflow: 'hidden',
-            marginBottom: 20,
-          }}>
+          <View style={{ width: '100%', height: 5, backgroundColor: '#F0F0F0', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
             <View style={{
               width: `${stats.availablePercent}%`,
               height: '100%',
@@ -345,134 +268,49 @@ export default function HomeScreen() {
             }} />
           </View>
 
-          {/* Deployed / Maintenance */}
-          <View style={{ flexDirection: 'row', gap: 16 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{
-                color: '#666666',
-                fontSize: 10,
-                fontWeight: '600',
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>
-                Deployed
-              </Text>
-              <Text style={{ color: '#ffb77d', fontSize: 20, fontWeight: '800' }}>
-                {stats.deployedUnits}
-              </Text>
+          {/* 3-up status row */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            <View style={{ flex: 1, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}>
+              <Text style={{ color: '#666666', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Available</Text>
+              <Text style={{ color: '#85cfff', fontSize: 18, fontWeight: '800', marginTop: 2 }}>{stats.availableUnits}</Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{
-                color: '#666666',
-                fontSize: 10,
-                fontWeight: '600',
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>
-                Maintenance
-              </Text>
-              <Text style={{ color: '#ffb4ab', fontSize: 20, fontWeight: '800' }}>
-                {stats.maintenanceUnits}
-              </Text>
+            <View style={{ flex: 1, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}>
+              <Text style={{ color: '#666666', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Deployed</Text>
+              <Text style={{ color: '#ffb77d', fontSize: 18, fontWeight: '800', marginTop: 2 }}>{stats.deployedUnits}</Text>
             </View>
-          </View>
-        </View>
-
-        {/* Live Unit Tracking */}
-        <View style={{
-          backgroundColor: '#F7F7F7',
-          borderRadius: 12,
-          padding: 24,
-          marginBottom: 16,
-          minHeight: 160,
-          justifyContent: 'space-between',
-        }}>
-          <View>
-            <Text style={{
-              color: '#1A1A1A',
-              fontSize: 16,
-              fontWeight: '800',
-              letterSpacing: -0.5,
-              marginBottom: 4,
-            }}>
-              Live Unit Tracking
-            </Text>
-            <Text style={{ color: '#666666', fontSize: 12, fontWeight: '400' }}>
-              {stats.deployedUnits} Active units in service area
-            </Text>
+            <View style={{ flex: 1, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}>
+              <Text style={{ color: '#666666', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Service</Text>
+              <Text style={{ color: '#ffb4ab', fontSize: 18, fontWeight: '800', marginTop: 2 }}>{stats.maintenanceUnits}</Text>
+            </View>
           </View>
 
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/map')}
             style={{
               backgroundColor: '#ff8c00',
-              paddingHorizontal: 20,
-              paddingVertical: 14,
-              borderRadius: 10,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 8,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 8,
-              marginTop: 20,
-              alignSelf: 'flex-end',
+              gap: 6,
             }}
             activeOpacity={0.8}
           >
-            <Ionicons name="map-outline" size={18} color="#4d2600" />
-            <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 14 }}>
-              OPEN FLEET MAP
+            <Ionicons name="map-outline" size={16} color="#4d2600" />
+            <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 13 }}>
+              Open Fleet Map
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Pending Reviews Card */}
-        <TouchableOpacity
-          onPress={() => router.push('/pending-reviews')}
-          activeOpacity={0.85}
-          style={{
-            backgroundColor: '#F7F7F7',
-            borderRadius: 12,
-            padding: 20,
-            marginBottom: 16,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          <View style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            backgroundColor: '#ffb77d',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: 14,
-          }}>
-            <Ionicons name="star-outline" size={22} color="#4d2600" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: '#1A1A1A', fontSize: 15, fontWeight: '800', letterSpacing: -0.3 }}>
-              Pending Reviews
-            </Text>
-            <Text style={{ color: '#666666', fontSize: 12, marginTop: 2 }}>
-              {(() => {
-                const count = (state.bookings || []).filter(
-                  (b) =>
-                    ['on_site', 'completed', 'picked_up', 'ready_for_pickup', 'dumping'].includes(b.status) &&
-                    !b.reviewRequestedAt
-                ).length;
-                return count === 0
-                  ? 'All caught up 🎉'
-                  : `${count} customer${count === 1 ? '' : 's'} to ask for a review`;
-              })()}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#999" />
-        </TouchableOpacity>
+        {/* Pending Reviews + Recent Bookings removed per Asaí 2026-04-30.
+            Pending Reviews now lives inside the "Ready for pickup" filter on
+            the Bookings tab; Recent Bookings is redundant with that tab. */}
 
-        {/* Recent Bookings */}
-        <View style={{ marginBottom: 16 }}>
+        {/* Recent Bookings — REMOVED */}
+        <View style={{ marginBottom: 16, display: 'none' }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>
             <Text style={{
               color: '#1A1A1A',

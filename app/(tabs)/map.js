@@ -170,18 +170,24 @@ export default function MapScreen() {
     });
     mapInstanceRef.current = map;
 
-    // TP Dumpsters HQ marker
+    // TP Dumpsters HQ marker — distinct visual so it doesn't blend with the
+    // delivered dumpster pins (Asaí: "no se distinguen, los dos son naranjas").
+    // Red home icon + bigger scale + label that pops on the map.
     new window.google.maps.Marker({
       position: { lat: TP_BASE.lat, lng: TP_BASE.lng },
       map,
       title: TP_BASE.label,
+      label: { text: 'HQ', color: '#FFFFFF', fontWeight: '800', fontSize: '11px' },
       icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 10,
-        fillColor: '#FF6B00',
+        // Home / building icon path (Material Icons "home" pictogram)
+        path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
+        fillColor: '#D32F2F',
         fillOpacity: 1,
         strokeColor: '#FFFFFF',
         strokeWeight: 2,
+        scale: 2.0,
+        anchor: new window.google.maps.Point(12, 22),
+        labelOrigin: new window.google.maps.Point(12, 9),
       },
     });
 
@@ -259,12 +265,20 @@ export default function MapScreen() {
         <Text style={styles.title}>Fleet Map</Text>
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#ff8c00' }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#D32F2F' }]} />
             <Text style={styles.legendText}>HQ</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#FF8C00' }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#00C853' }]} />
             <Text style={styles.legendText}>Delivered</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#FF8C3A' }]} />
+            <Text style={styles.legendText}>Ready for pickup</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#2196F3' }]} />
+            <Text style={styles.legendText}>Scheduled</Text>
           </View>
         </View>
       </View>

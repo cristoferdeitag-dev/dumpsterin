@@ -22,14 +22,17 @@ const TOP_FILTERS = [
   { id: 'active', label: 'Active' },
 ];
 
+// Order chosen with Asaí 2026-04-30: scheduled first (most operationally
+// useful), then progressing through the lifecycle, with "All" pushed to the
+// end (history view, rarely the default user wants).
 const DETAIL_FILTERS = [
-  { id: 'all', label: 'All' },
   { id: 'scheduled', label: 'Scheduled' },
   { id: 'in_transit', label: 'In Transit' },
   { id: 'on_site', label: 'On Site' },
-  { id: 'ready_for_pickup', label: 'Ready' },
+  { id: 'ready_for_pickup', label: 'Ready for pickup' },
   { id: 'picked_up', label: 'Picked Up' },
   { id: 'completed', label: 'Completed' },
+  { id: 'all', label: 'All' },
 ];
 
 export default function BookingsScreen() {
@@ -38,8 +41,14 @@ export default function BookingsScreen() {
   const { bookings } = state;
 
   const [topFilter, setTopFilter] = useState('all');
-  const [detailFilter, setDetailFilter] = useState('all');
+  // Default to "scheduled" — that's what Asaí works on most of the day.
+  const [detailFilter, setDetailFilter] = useState('scheduled');
 
+  // Timeline windows per status — agreed with Asaí 2026-04-30:
+  //  • scheduled: today → next 14 days (operationally what's coming up)
+  //  • in_transit / on_site / ready_for_pickup: no date filter (all currently active)
+  //  • picked_up / completed: last 30 days (recent history)
+  //  • all: last 90 days (deep history without overwhelming the list)
   const filteredBookings = useMemo(() => {
     let filtered = [...bookings];
 
@@ -47,10 +56,52 @@ export default function BookingsScreen() {
       filtered = filtered.filter(b => b.status === detailFilter);
     }
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dateOf = (b) => {
+      const s = b.deliveryDate || b.createdAt || '';
+      if (!s) return null;
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    const daysFromToday = (d) => Math.floor((d - today) / 86400000);
+
+    if (detailFilter === 'scheduled') {
+      filtered = filtered.filter((b) => {
+        const d = dateOf(b);
+        if (!d) return true;
+        const delta = daysFromToday(d);
+        return delta >= 0 && delta <= 14;
+      });
+    } else if (detailFilter === 'picked_up' || detailFilter === 'completed') {
+      filtered = filtered.filter((b) => {
+        const d = dateOf(b);
+        if (!d) return true;
+        const delta = daysFromToday(d);
+        return delta >= -30 && delta <= 0;
+      });
+    } else if (detailFilter === 'all') {
+      filtered = filtered.filter((b) => {
+        const d = dateOf(b);
+        if (!d) return true;
+        const delta = daysFromToday(d);
+        return delta >= -90 && delta <= 90;
+      });
+    }
+    // in_transit / on_site / ready_for_pickup: no date filter
+
     filtered.sort((a, b) => (b.deliveryDate || b.createdAt || '').localeCompare(a.deliveryDate || a.createdAt || ''));
 
     return filtered;
   }, [bookings, detailFilter]);
+
+  const filterHint = useMemo(() => {
+    if (detailFilter === 'scheduled') return 'Today + next 14 days';
+    if (detailFilter === 'picked_up' || detailFilter === 'completed') return 'Last 30 days';
+    if (detailFilter === 'all') return 'Last 90 days';
+    if (['in_transit', 'on_site', 'ready_for_pickup'].includes(detailFilter)) return 'All currently active';
+    return '';
+  }, [detailFilter]);
 
   const renderBookingCard = useCallback(({ item: booking }) => {
     const statusColor = STATUS_COLORS[booking.status] || '#999999';
@@ -243,6 +294,11 @@ export default function BookingsScreen() {
             ))}
           </View>
         </ScrollView>
+        {filterHint ? (
+          <Text style={{ marginTop: 8, fontSize: 11, color: '#999999', fontWeight: '500' }}>
+            Showing: {filterHint} · {filteredBookings.length} {filteredBookings.length === 1 ? 'booking' : 'bookings'}
+          </Text>
+        ) : null}
       </View>
 
       {/* Booking List */}
