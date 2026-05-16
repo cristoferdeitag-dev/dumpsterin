@@ -1,12 +1,15 @@
 // AppActions — async wrappers for mutating app state.
 //
-// Replaces the fire-and-forget pattern that used to live inside the reducers.
-// New flow:
-//   1. Caller invokes one of these functions.
-//   2. Function awaits Supabase. If it fails, it throws.
-//   3. Only on success does it dispatch to the reducer so local state matches DB.
+// Flow:
+//   1. Caller invokes an action.
+//   2. Action awaits Supabase. If it fails, it throws.
+//   3. Only on success does it dispatch to the reducer.
 //
-// Callers should wrap calls in try/catch and surface the error to the user.
+// Some flows compose multiple writes (e.g. addBooking also flips the assigned
+// dumpster to "on_site"). When the *primary* write succeeds but a *secondary*
+// write fails, we throw a `PartialStateError` so the caller can show a clear
+// message — "booking saved but dumpster wasn't reassigned, fix it manually".
+// We never silently swallow the secondary failure.
 
 import {
   createBooking as sbCreateBooking,
@@ -25,30 +28,24 @@ function generateId(customerName) {
   return `CAL-${date}-${prefix}`;
 }
 
-class AppActionError extends Error {
-  constructor(message, cause) {
+export class PartialStateError extends Error {
+  constructor(message, { primarySaved = true, cause } = {}) {
     super(message);
-    this.name = 'AppActionError';
+    this.name = 'PartialStateError';
+    this.primarySaved = primarySaved;
     this.cause = cause;
   }
 }
 
+// Helpers — these THROW on Supabase failure (no console.warn swallowing).
 async function freeDumpster(dispatch, dumpsterId) {
-  try {
-    await sbUpdateDumpster(dumpsterId, 'on_yard');
-    dispatch({ type: 'UPDATE_DUMPSTER', payload: { id: dumpsterId, status: 'on_yard', assignedBooking: null } });
-  } catch (e) {
-    console.warn('freeDumpster failed:', e);
-  }
+  await sbUpdateDumpster(dumpsterId, 'on_yard');
+  dispatch({ type: 'UPDATE_DUMPSTER', payload: { id: dumpsterId, status: 'on_yard', assignedBooking: null } });
 }
 
 async function deployDumpster(dispatch, dumpsterId, bookingId) {
-  try {
-    await sbUpdateDumpster(dumpsterId, 'on_site');
-    dispatch({ type: 'UPDATE_DUMPSTER', payload: { id: dumpsterId, status: 'on_site', assignedBooking: bookingId } });
-  } catch (e) {
-    console.warn('deployDumpster failed:', e);
-  }
+  await sbUpdateDumpster(dumpsterId, 'on_site');
+  dispatch({ type: 'UPDATE_DUMPSTER', payload: { id: dumpsterId, status: 'on_site', assignedBooking: bookingId } });
 }
 
 export function useAppActions() {
@@ -63,10 +60,16 @@ export function useAppActions() {
       createdAt: new Date().toISOString().slice(0, 10),
     };
     const saved = await sbCreateBooking(booking);
-    if (!saved) throw new AppActionError("Couldn't save the new booking. Check your connection and try again.");
     dispatch({ type: 'ADD_BOOKING', payload: saved });
     if (saved.assignedDumpster) {
-      await deployDumpster(dispatch, saved.assignedDumpster, saved.id);
+      try {
+        await deployDumpster(dispatch, saved.assignedDumpster, saved.id);
+      } catch (e) {
+        throw new PartialStateError(
+          "Booking saved, but couldn't assign the dumpster. Open Inventory and assign it manually.",
+          { primarySaved: true, cause: e }
+        );
+      }
     }
     return saved;
   }
@@ -74,18 +77,28 @@ export function useAppActions() {
   async function updateBooking(updated) {
     const old = state.bookings.find(b => b.id === updated.id);
     const saved = await sbUpdateBookingFull(updated);
-    if (!saved) throw new AppActionError("Couldn't save the booking changes. Try again.");
     dispatch({ type: 'UPDATE_BOOKING', payload: saved });
 
-    // Dumpster reconciliation: free old, deploy new, free terminal states.
+    const dumpsterErrors = [];
+
     if (old?.assignedDumpster && old.assignedDumpster !== saved.assignedDumpster) {
-      await freeDumpster(dispatch, old.assignedDumpster);
+      try { await freeDumpster(dispatch, old.assignedDumpster); }
+      catch (e) { dumpsterErrors.push(`Couldn't free dumpster ${old.assignedDumpster}: ${e.message}`); }
     }
     if (saved.assignedDumpster && saved.assignedDumpster !== old?.assignedDumpster) {
-      await deployDumpster(dispatch, saved.assignedDumpster, saved.id);
+      try { await deployDumpster(dispatch, saved.assignedDumpster, saved.id); }
+      catch (e) { dumpsterErrors.push(`Couldn't assign dumpster ${saved.assignedDumpster}: ${e.message}`); }
     }
     if ((saved.status === 'completed' || saved.status === 'cancelled') && saved.assignedDumpster) {
-      await freeDumpster(dispatch, saved.assignedDumpster);
+      try { await freeDumpster(dispatch, saved.assignedDumpster); }
+      catch (e) { dumpsterErrors.push(`Couldn't free dumpster ${saved.assignedDumpster}: ${e.message}`); }
+    }
+
+    if (dumpsterErrors.length > 0) {
+      throw new PartialStateError(
+        `Booking saved, but dumpster status didn't sync:\n${dumpsterErrors.join('\n')}\nOpen Inventory to fix.`,
+        { primarySaved: true }
+      );
     }
     return saved;
   }
@@ -95,7 +108,14 @@ export function useAppActions() {
     dispatch({ type: 'UPDATE_BOOKING_STATUS', payload: { bookingId, status } });
     const booking = state.bookings.find(b => b.id === bookingId);
     if ((status === 'completed' || status === 'cancelled') && booking?.assignedDumpster) {
-      await freeDumpster(dispatch, booking.assignedDumpster);
+      try {
+        await freeDumpster(dispatch, booking.assignedDumpster);
+      } catch (e) {
+        throw new PartialStateError(
+          `Status saved, but dumpster ${booking.assignedDumpster} wasn't freed. Open Inventory to fix.`,
+          { primarySaved: true, cause: e }
+        );
+      }
     }
   }
 
@@ -104,7 +124,14 @@ export function useAppActions() {
     await sbDeleteBooking(id);
     dispatch({ type: 'DELETE_BOOKING', payload: id });
     if (booking?.assignedDumpster) {
-      await freeDumpster(dispatch, booking.assignedDumpster);
+      try {
+        await freeDumpster(dispatch, booking.assignedDumpster);
+      } catch (e) {
+        throw new PartialStateError(
+          `Booking deleted, but dumpster ${booking.assignedDumpster} wasn't freed. Open Inventory to fix.`,
+          { primarySaved: true, cause: e }
+        );
+      }
     }
   }
 
@@ -126,8 +153,6 @@ export function useAppActions() {
     dispatch({ type: 'UPDATE_DUMPSTER', payload: { id, status } });
   }
 
-  // ADD_DUMPSTER is currently used only for local mock additions. When/if we
-  // add a Supabase create-dumpster RPC, mirror the pattern above.
   function addDumpsterLocalOnly(dumpster) {
     dispatch({ type: 'ADD_DUMPSTER', payload: dumpster });
   }

@@ -246,8 +246,8 @@ function AddressAutocomplete({ value, onChangeText, onAddressSelect, placeholder
 // ── Main Component ──
 export default function CreateBooking() {
   const router = useRouter();
-  const { state, dispatch } = useApp();
-  const { addBooking } = useAppActions();
+  const { state } = useApp();
+  const { addBooking, updateBooking } = useAppActions();
   const { copyFrom } = useLocalSearchParams();
 
   // Customer fields
@@ -511,10 +511,16 @@ export default function CreateBooking() {
     }
   };
 
-  // SEND QUOTE — creates Stripe invoice + sends email & SMS via tpdumpsters.com
-  // Generates a deterministic booking_id BEFORE the invoice is created so the
-  // Stripe invoice carries metadata.booking_id, which the Supabase webhook
-  // uses later to mark the booking paid automatically (no manual reconcile).
+  // SEND QUOTE — three-step flow:
+  //   1. Save booking as `quote_pending` (so we have a record before talking to Stripe)
+  //   2. POST to /api/invoice → Stripe creates invoice + email/SMS to customer
+  //   3. Update booking to `quote_sent` (so the list reflects what happened)
+  //
+  // If step 1 fails: nothing was sent, clean failure.
+  // If step 2 fails: booking sits at `quote_pending` so the user can retry without
+  // double-billing the customer.
+  // If step 3 fails: customer got the quote but the local status is stale — we
+  // tell the user so they can refresh.
   const handleSendQuote = async () => {
     if (!validateForm()) return;
     if (!email.trim() && !phone.trim()) {
@@ -524,13 +530,20 @@ export default function CreateBooking() {
 
     setSendingQuote(true);
     try {
-      // Same id format the AppContext reducer uses, so the booking row in
-      // Supabase will share booking_number with the Stripe invoice's metadata.
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const prefix = (name.trim() || 'BK').slice(0, 4).toUpperCase().replace(/\s/g, '');
       const bookingId = `CAL-${today}-${prefix}`;
 
-      // Translate Dumpsterin's internal ids → labels the invoice route expects.
+      // Step 1 — save booking as quote_pending BEFORE we contact Stripe.
+      try {
+        await addBooking({ ...buildBookingObj('quote_pending'), id: bookingId });
+      } catch (err) {
+        Alert.alert('Could not save booking', `${err.message || 'Save failed'} — quote not sent.`);
+        setSendingQuote(false);
+        return;
+      }
+
+      // Step 2 — create + send Stripe invoice.
       const svc = SERVICE_TYPES.find((s) => s.id === serviceType);
       const sz = DUMPSTER_SIZES.find((s) => s.id === dumpsterSize);
       const serviceLabel = svc?.label || serviceType;
@@ -553,46 +566,60 @@ export default function CreateBooking() {
         }
       });
 
-      const res = await fetch('https://tpdumpsters.com/api/invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId,
-          customerName: name.trim(),
-          customerEmail: email.trim(),
-          customerPhone: phone.trim(),
-          billingAddress: fullBillingAddress,
-          deliveryAddress: fullDeliveryAddress,
-          items,
-          extras,
-          notes: notes.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.id) {
-        // Save the booking with the SAME id used in Stripe metadata.
-        try {
-          await addBooking({ ...buildBookingObj('quote_sent'), id: bookingId });
-        } catch (err) {
-          Alert.alert('Quote sent, but booking not saved', `${err.message || 'Save failed'} — please reload and check before quoting again.`);
-          setSendingQuote(false);
-          return;
+      let data;
+      try {
+        const res = await fetch('https://tpdumpsters.com/api/invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingId,
+            customerName: name.trim(),
+            customerEmail: email.trim(),
+            customerPhone: phone.trim(),
+            billingAddress: fullBillingAddress,
+            deliveryAddress: fullDeliveryAddress,
+            items,
+            extras,
+            notes: notes.trim(),
+          }),
+        });
+        data = await res.json();
+        if (!res.ok || !data.id) {
+          throw new Error(data?.error || `Invoice API returned ${res.status}`);
         }
-        const channel = data.sentEmail
-          ? `email a ${email.trim()}`
-          : data.sentSms
-          ? `SMS a ${phone.trim()}`
-          : 'creada (no se envió notificación)';
+      } catch (err) {
         Alert.alert(
-          'Quote enviada',
-          `Invoice ${data.number || data.id} enviada por ${channel}.\nMonto: $${data.amount || total}`,
+          'Quote failed',
+          `Booking saved as pending. Couldn't send quote: ${err.message || 'connection error'}. Retry from the booking detail page.`
         );
-        router.back();
-      } else {
-        Alert.alert('Error', data.error || 'No se pudo crear la invoice. Intenta de nuevo.');
+        setSendingQuote(false);
+        return;
       }
+
+      // Step 3 — flip status to quote_sent now that customer received it.
+      try {
+        await updateBooking({ ...buildBookingObj('quote_sent'), id: bookingId });
+      } catch (err) {
+        Alert.alert(
+          'Quote sent, status not updated',
+          `Customer received the quote, but updating the booking status failed: ${err.message || 'Save failed'}. Refresh the list to recheck.`
+        );
+        setSendingQuote(false);
+        return;
+      }
+
+      const channel = data.sentEmail
+        ? `email a ${email.trim()}`
+        : data.sentSms
+        ? `SMS a ${phone.trim()}`
+        : 'creada (no se envió notificación)';
+      Alert.alert(
+        'Quote enviada',
+        `Invoice ${data.number || data.id} enviada por ${channel}.\nMonto: $${data.amount || total}`,
+      );
+      router.back();
     } catch (err) {
-      Alert.alert('Error', 'No se pudo conectar al servidor. Revisa tu conexión.');
+      Alert.alert('Error', err.message || 'Algo salió mal. Intenta de nuevo.');
     } finally {
       setSendingQuote(false);
     }

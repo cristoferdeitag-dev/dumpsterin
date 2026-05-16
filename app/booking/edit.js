@@ -40,7 +40,7 @@ const SOURCE_OPTIONS = ['phone', 'website', 'walkin'];
 export default function EditBooking() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
   const { updateBooking } = useAppActions();
 
   const booking = state.bookings.find((b) => b.id === id);

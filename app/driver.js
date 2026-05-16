@@ -58,7 +58,7 @@ function formatDate(dateStr) {
 }
 
 export default function DriverScreen() {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
   const actions = useAppActions();
   const router = useRouter();
   const today = new Date().toISOString().split('T')[0];

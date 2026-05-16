@@ -49,7 +49,7 @@ function getCapacityYards(size) {
 }
 
 export default function InventoryScreen() {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
   const { updateDumpsterStatus } = useAppActions();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');

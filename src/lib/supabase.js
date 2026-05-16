@@ -62,6 +62,14 @@ export async function fetchBookings() {
   return (data || []).map(mapBookingFromDB);
 }
 
+// Mutation helpers throw a clean error message on failure. Callers wrap in
+// try/catch so the UI can show the failure to the user.
+function raise(prefix, error) {
+  const msg = error?.message || error?.hint || JSON.stringify(error);
+  console.error(`${prefix}:`, error);
+  throw new Error(`${prefix}: ${msg}`);
+}
+
 export async function createBooking(booking) {
   const companyId = await getCompanyId();
   const dbBooking = mapBookingToDB(booking, companyId);
@@ -70,7 +78,7 @@ export async function createBooking(booking) {
     .insert(dbBooking)
     .select()
     .single();
-  if (error) { console.error('createBooking error:', error); return null; }
+  if (error) raise('createBooking failed', error);
   pushToCalendar('create', data);
   return mapBookingFromDB(data);
 }
@@ -82,16 +90,19 @@ export async function updateBooking(id, updates) {
     .eq('id', id)
     .select()
     .single();
-  if (error) { console.error('updateBooking error:', error); return null; }
+  if (error) raise('updateBooking failed', error);
   pushToCalendar('update', data);
   return mapBookingFromDB(data);
 }
 
-// Convenience wrapper for callers that have an app-shape booking object and
-// want to persist all editable fields in one call.
+// Convenience wrapper for callers that have an app-shape booking object.
+// Only persists editable fields — `mapBookingToDB` itself guards optional
+// keys with `if (b.X !== undefined)`.
 export async function updateBookingFull(booking) {
   const companyId = await getCompanyId();
   const dbPatch = mapBookingToDB(booking, companyId);
+  // Drop columns that should never be updated post-create.
+  delete dbPatch.company_id;
   return updateBooking(booking.id, dbPatch);
 }
 
@@ -102,8 +113,7 @@ export async function updateBookingStatus(id, status) {
     .eq('id', id)
     .select()
     .single();
-  if (error) { console.error('updateBookingStatus error:', error); return; }
-  // Status changes (cancellations, etc.) might affect the calendar event
+  if (error) raise('updateBookingStatus failed', error);
   if (status === 'cancelled') {
     pushToCalendar('delete', data);
   } else {
@@ -116,7 +126,7 @@ export async function markReviewRequested(id, timestamp) {
     .from('bookings')
     .update({ review_requested_at: timestamp })
     .eq('id', id);
-  if (error) console.error('markReviewRequested error:', error);
+  if (error) raise('markReviewRequested failed', error);
 }
 
 export async function bulkMarkReviewsRequestedBefore(isoDate) {
@@ -129,12 +139,12 @@ export async function bulkMarkReviewsRequestedBefore(isoDate) {
     .is('review_requested_at', null)
     .in('status', ['delivered', 'completed', 'picked_up', 'pickup_ready'])
     .select('id');
-  if (error) { console.error('bulkMarkReviewsRequestedBefore error:', error); return 0; }
+  if (error) raise('bulkMarkReviewsRequestedBefore failed', error);
   return (data || []).length;
 }
 
 export async function deleteBooking(id) {
-  // Read calendar IDs before deleting so we can clean up the events
+  // Capture calendar IDs first so we can clean up after the row is gone.
   const { data: existing } = await supabase
     .from('bookings')
     .select('id, calendar_delivery_id, calendar_pickup_id')
@@ -145,7 +155,7 @@ export async function deleteBooking(id) {
     .from('bookings')
     .delete()
     .eq('id', id);
-  if (error) { console.error('deleteBooking error:', error); return; }
+  if (error) raise('deleteBooking failed', error);
   if (existing) pushToCalendar('delete', existing);
 }
 
@@ -174,21 +184,19 @@ export async function fetchDumpsters() {
 }
 
 export async function updateDumpsterStatus(id, status) {
-  // Map app status to DB status if needed
   const dbStatus = status === 'on_yard' ? 'available' : status === 'on_site' ? 'deployed' : status;
-  // Try by label first (app uses label as ID), then by UUID
-  const { error } = await supabase
+  // Try by label first (the app uses label as ID), then fall back to UUID.
+  const { data: byLabel, error } = await supabase
     .from('dumpsters')
     .update({ status: dbStatus })
-    .eq('label', id);
-  if (error) {
-    // Fallback: try by UUID
-    const { error: err2 } = await supabase
-      .from('dumpsters')
-      .update({ status: dbStatus })
-      .eq('id', id);
-    if (err2) console.error('updateDumpsterStatus error:', err2);
-  }
+    .eq('label', id)
+    .select('id');
+  if (!error && byLabel && byLabel.length > 0) return;
+  const { error: err2 } = await supabase
+    .from('dumpsters')
+    .update({ status: dbStatus })
+    .eq('id', id);
+  if (err2) raise('updateDumpsterStatus failed', err2);
 }
 
 // ── DRIVERS ──
