@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, Image } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, TextInput, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
+import { useAppActions } from '../../src/context/AppActions';
 
 const COLORS = {
   surface: '#FFFFFF',
@@ -49,6 +50,7 @@ function getCapacityYards(size) {
 
 export default function InventoryScreen() {
   const { state, dispatch } = useApp();
+  const { updateDumpsterStatus } = useAppActions();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   // Sections collapsed by default. User taps a size header to expand.
@@ -84,8 +86,12 @@ export default function InventoryScreen() {
     return state.bookings.find((b) => b.id === dumpster.assignedBooking) || null;
   }
 
-  function handleStatusChange(dumpsterId, newStatus) {
-    dispatch({ type: 'UPDATE_DUMPSTER', payload: { id: dumpsterId, status: newStatus } });
+  async function handleStatusChange(dumpsterId, newStatus) {
+    try {
+      await updateDumpsterStatus(dumpsterId, newStatus);
+    } catch (err) {
+      Alert.alert('Could not update', err.message || 'Try again.');
+    }
   }
 
   // Compact row: dumpster id + status badge + linked booking shortcut.

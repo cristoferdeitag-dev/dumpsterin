@@ -15,6 +15,7 @@ import { Calendar } from 'react-native-calendars';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
+import { useAppActions } from '../../src/context/AppActions';
 import {
   DUMPSTER_SIZES,
   SERVICE_TYPES,
@@ -246,6 +247,7 @@ function AddressAutocomplete({ value, onChangeText, onAddressSelect, placeholder
 export default function CreateBooking() {
   const router = useRouter();
   const { state, dispatch } = useApp();
+  const { addBooking } = useAppActions();
   const { copyFrom } = useLocalSearchParams();
 
   // Customer fields
@@ -496,13 +498,17 @@ export default function CreateBooking() {
   });
 
   // BOOK DIRECT — creates booking immediately
-  const handleBookDirect = () => {
+  const handleBookDirect = async () => {
     if (!validateForm()) return;
     if (!paymentMethod) { Alert.alert('Required', 'Please select payment method for direct booking.'); return; }
 
-    dispatch({ type: 'ADD_BOOKING', payload: buildBookingObj('scheduled') });
-    Alert.alert('Booking Created', `Booking created for ${name.trim()}. Payment: ${paymentMethod}.`);
-    router.back();
+    try {
+      await addBooking(buildBookingObj('scheduled'));
+      Alert.alert('Booking Created', `Booking created for ${name.trim()}. Payment: ${paymentMethod}.`);
+      router.back();
+    } catch (err) {
+      Alert.alert('Could not save', err.message || 'Booking failed to save. Check your connection and try again.');
+    }
   };
 
   // SEND QUOTE — creates Stripe invoice + sends email & SMS via tpdumpsters.com
@@ -565,10 +571,13 @@ export default function CreateBooking() {
       const data = await res.json();
       if (res.ok && data.id) {
         // Save the booking with the SAME id used in Stripe metadata.
-        dispatch({
-          type: 'ADD_BOOKING',
-          payload: { ...buildBookingObj('quote_sent'), id: bookingId },
-        });
+        try {
+          await addBooking({ ...buildBookingObj('quote_sent'), id: bookingId });
+        } catch (err) {
+          Alert.alert('Quote sent, but booking not saved', `${err.message || 'Save failed'} — please reload and check before quoting again.`);
+          setSendingQuote(false);
+          return;
+        }
         const channel = data.sentEmail
           ? `email a ${email.trim()}`
           : data.sentSms

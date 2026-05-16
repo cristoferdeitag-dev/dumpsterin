@@ -87,6 +87,14 @@ export async function updateBooking(id, updates) {
   return mapBookingFromDB(data);
 }
 
+// Convenience wrapper for callers that have an app-shape booking object and
+// want to persist all editable fields in one call.
+export async function updateBookingFull(booking) {
+  const companyId = await getCompanyId();
+  const dbPatch = mapBookingToDB(booking, companyId);
+  return updateBooking(booking.id, dbPatch);
+}
+
 export async function updateBookingStatus(id, status) {
   const { data, error } = await supabase
     .from('bookings')

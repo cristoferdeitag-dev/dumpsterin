@@ -15,6 +15,7 @@ import { bgInput } from '../../src/theme/colors';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
+import { useAppActions } from '../../src/context/AppActions';
 import { updateBooking as sbUpdateBooking } from '../../src/lib/supabase';
 import { BOOKING_STATUSES } from '../../src/data/mockData';
 import {
@@ -41,6 +42,7 @@ export default function BookingDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { state, dispatch } = useApp();
+  const { updateBooking, updateBookingStatus, deleteBooking } = useAppActions();
 
   const booking = state.bookings.find((b) => b.id === id);
 
@@ -62,8 +64,12 @@ export default function BookingDetail() {
     );
   }
 
-  const handleStatusChange = (newStatus) => {
-    dispatch({ type: 'UPDATE_BOOKING_STATUS', payload: { bookingId: id, status: newStatus } });
+  const handleStatusChange = async (newStatus) => {
+    try {
+      await updateBookingStatus(id, newStatus);
+    } catch (err) {
+      Alert.alert('Could not update status', err.message || 'Try again.');
+    }
   };
 
   const handleDelete = () => {
@@ -75,9 +81,13 @@ export default function BookingDetail() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            dispatch({ type: 'DELETE_BOOKING', payload: id });
-            router.back();
+          onPress: async () => {
+            try {
+              await deleteBooking(id);
+              router.back();
+            } catch (err) {
+              Alert.alert('Could not delete', err.message || 'Try again.');
+            }
           },
         },
       ]

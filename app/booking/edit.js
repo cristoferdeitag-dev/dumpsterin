@@ -12,6 +12,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
+import { useAppActions } from '../../src/context/AppActions';
 import {
   DUMPSTER_SIZES,
   SERVICE_TYPES,
@@ -40,6 +41,7 @@ export default function EditBooking() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { state, dispatch } = useApp();
+  const { updateBooking } = useAppActions();
 
   const booking = state.bookings.find((b) => b.id === id);
 
@@ -150,7 +152,7 @@ export default function EditBooking() {
     return base - disc + specialTotal;
   }, [basePrice, discount, selectedSpecialItems]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) return Alert.alert('Required', 'Customer name is required.');
     if (!address.trim()) return Alert.alert('Required', 'Delivery address is required.');
     if (!deliveryDate.trim()) return Alert.alert('Required', 'Delivery date is required.');
@@ -183,8 +185,12 @@ export default function EditBooking() {
       updatedAt: new Date().toISOString(),
     };
 
-    dispatch({ type: 'UPDATE_BOOKING', payload: updatedBooking });
-    router.back();
+    try {
+      await updateBooking(updatedBooking);
+      router.back();
+    } catch (err) {
+      Alert.alert('Could not save', err.message || 'Edit failed to save. Check your connection and try again.');
+    }
   };
 
   if (!booking) {

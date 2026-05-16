@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { useApp } from '../src/context/AppContext';
+import { useAppActions } from '../src/context/AppActions';
 
 function getDatePlusDays(dateStr, days) {
   const d = new Date(dateStr + 'T12:00:00');
@@ -58,6 +59,7 @@ function formatDate(dateStr) {
 
 export default function DriverScreen() {
   const { state, dispatch } = useApp();
+  const actions = useAppActions();
   const router = useRouter();
   const today = new Date().toISOString().split('T')[0];
 
@@ -107,7 +109,7 @@ export default function DriverScreen() {
                     key={booking.id}
                     booking={booking}
                     type="delivery"
-                    dispatch={dispatch}
+                    actions={actions}
                     dumpsters={state.dumpsters}
                   />
                 ))}
@@ -123,7 +125,7 @@ export default function DriverScreen() {
                     key={booking.id}
                     booking={booking}
                     type="pickup"
-                    dispatch={dispatch}
+                    actions={actions}
                     dumpsters={state.dumpsters}
                   />
                 ))}
@@ -173,7 +175,7 @@ export default function DriverScreen() {
   );
 }
 
-function JobCard({ booking, type, dispatch, dumpsters }) {
+function JobCard({ booking, type, actions, dumpsters }) {
   const [photoUri, setPhotoUri] = useState(null);
   const [receiptWeight, setReceiptWeight] = useState('');
   const [showOverweight, setShowOverweight] = useState(false);
@@ -206,8 +208,12 @@ function JobCard({ booking, type, dispatch, dumpsters }) {
 
   const showOverweightCalc = !isDelivery && booking.status === 'picked_up' && photoUri;
 
-  function handleStatusUpdate(status) {
-    dispatch({ type: 'UPDATE_BOOKING_STATUS', payload: { bookingId: booking.id, status } });
+  async function handleStatusUpdate(status) {
+    try {
+      await actions.updateBookingStatus(booking.id, status);
+    } catch (err) {
+      Alert.alert('Could not update', err.message || 'Try again.');
+    }
   }
 
   function handleNavigate() {
