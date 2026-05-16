@@ -80,17 +80,39 @@ export default function HomeScreen() {
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    const currentMonth = today.slice(0, 7);
-    const monthBookings = bookings.filter(b => b.status !== 'cancelled' && (b.deliveryDate || '') >= currentMonth + '-01' && (b.deliveryDate || '') <= today);
-    const totalRevenue = monthBookings.reduce((sum, b) => sum + (b.total || 0), 0);
+    const currentMonth = today.slice(0, 7); // YYYY-MM
 
-    // Revenue by sales rep
+    // Previous calendar month, in YYYY-MM form.
+    const [y, m] = currentMonth.split('-').map(Number);
+    const prevDate = new Date(y, m - 2, 1); // m is 1-indexed, JS Date is 0-indexed; -2 = prev month
+    const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+    const prevMonthEnd = `${prevMonth}-31`; // safe upper bound: ISO string compare works
+
+    const isCounted = b => b.status !== 'cancelled';
+    const monthBookings = bookings.filter(b => isCounted(b) && (b.deliveryDate || '') >= currentMonth + '-01' && (b.deliveryDate || '') <= today);
+    const prevMonthBookings = bookings.filter(b => isCounted(b) && (b.deliveryDate || '') >= prevMonth + '-01' && (b.deliveryDate || '') <= prevMonthEnd);
+
+    const totalRevenue = monthBookings.reduce((sum, b) => sum + (b.total || 0), 0);
+    const prevRevenue = prevMonthBookings.reduce((sum, b) => sum + (b.total || 0), 0);
+
+    // Real month-over-month change. null when there's no previous data to compare.
+    let revenueChange = null;
+    if (prevRevenue > 0) {
+      revenueChange = ((totalRevenue - prevRevenue) / prevRevenue) * 100;
+    } else if (totalRevenue > 0) {
+      revenueChange = 100; // anything-from-zero → show as +100%
+    }
+
+    // Revenue by sales rep — uses sales_rep (b.generatedBy in app shape).
+    // Falls back to 'unknown' rather than treating source='phone' as Asaí,
+    // which silently misattributed Tiago's phone sales pre-2026-05.
     const repRevenue = {};
     monthBookings.forEach(b => {
-      const rep = b.generatedBy || b.source || 'unknown';
+      const rep = b.generatedBy || (b.source === 'website' ? 'website' : 'unknown');
       if (!repRevenue[rep]) repRevenue[rep] = 0;
       repRevenue[rep] += b.total || 0;
     });
+
     const activeBookings = bookings.filter(b => !['completed', 'cancelled'].includes(b.status));
     const completedBookings = bookings.filter(b => b.status === 'completed');
     const availableUnits = dumpsters.filter(d => d.status === 'available').length;
@@ -98,10 +120,10 @@ export default function HomeScreen() {
     const maintenanceUnits = dumpsters.filter(d => d.status === 'maintenance').length;
     const totalUnits = dumpsters.length;
     const availablePercent = totalUnits > 0 ? (availableUnits / totalUnits) * 100 : 0;
-    const revenueChange = 12.5;
 
     return {
       totalRevenue,
+      prevRevenue,
       activeCount: activeBookings.length,
       completedCount: completedBookings.length,
       availableUnits,
@@ -194,9 +216,18 @@ export default function HomeScreen() {
                 <Text style={{ color: '#ffb77d', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
                   {hideRevenue ? '••••••' : formatCurrency(stats.totalRevenue)}
                 </Text>
-                {!hideRevenue && (
-                  <Text style={{ color: '#85cfff', fontWeight: '700', fontSize: 12 }}>
-                    +{stats.revenueChange}%
+                {!hideRevenue && stats.revenueChange !== null && (
+                  <Text style={{
+                    color: stats.revenueChange >= 0 ? '#85cfff' : '#ffb4ab',
+                    fontWeight: '700',
+                    fontSize: 12,
+                  }}>
+                    {stats.revenueChange >= 0 ? '+' : ''}{stats.revenueChange.toFixed(1)}%
+                  </Text>
+                )}
+                {!hideRevenue && stats.revenueChange === null && (
+                  <Text style={{ color: '#999999', fontWeight: '600', fontSize: 11 }}>
+                    no prior data
                   </Text>
                 )}
               </View>
@@ -226,7 +257,7 @@ export default function HomeScreen() {
             reps later without crowding the home screen). */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 16 }} style={{ marginBottom: 12, marginHorizontal: -16, paddingHorizontal: 16 }}>
           {Object.entries(stats.repRevenue || {}).sort((a, b) => b[1] - a[1]).map(([rep, rev]) => {
-            const displayName = rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep === 'phone' ? 'Asai (Phone)' : rep === 'website' ? 'Web' : rep;
+            const displayName = rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep === 'website' ? 'Web' : rep === 'unknown' ? 'Unassigned' : rep;
             return (
               <View key={rep} style={{ minWidth: 110, backgroundColor: '#F7F7F7', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
                 <Text style={{ color: '#999999', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>
