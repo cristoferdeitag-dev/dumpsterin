@@ -132,6 +132,16 @@ export default function RevenueScreen() {
     const expectedRevenue = sumAmt(expected);
     const totalRevenue = closedRevenue + expectedRevenue;
 
+    // Extras (add-ons) revenue across the same period — base summed from
+    // extra_days_fee + overweight_fee + special_items_fee on each booking.
+    const extrasRevenue = inRange.reduce((s, b) => s + (b.extrasTotal || 0), 0);
+    const extrasBreakdown = inRange.reduce((acc, b) => {
+      (b.extras || []).forEach((ex) => {
+        acc[ex.label] = (acc[ex.label] || 0) + (ex.amount || 0);
+      });
+      return acc;
+    }, {});
+
     const thisMonth = inRange.filter((b) => (b[dateField] || '').startsWith(currentYM));
     const monthRevenue = sumAmt(thisMonth);
     const avgValue = inRange.length ? totalRevenue / inRange.length : 0;
@@ -207,6 +217,8 @@ export default function RevenueScreen() {
       bySize,
       topCustomers,
       weeklyTrend,
+      extrasRevenue,
+      extrasBreakdown,
     };
   }, [bookings, currentYM, dateFilter, customStart, customEnd, basis, dateField, amountField]);
 
@@ -375,6 +387,28 @@ export default function RevenueScreen() {
             <Text style={s.cardValue}>{fmt(stats.avgValue)}</Text>
           </View>
         </View>
+
+        {/* Extras Revenue */}
+        {stats.extrasRevenue > 0 && (
+          <View style={[s.section, { paddingTop: 4 }]}>
+            <Text style={s.sectionTitle}>Extras Revenue</Text>
+            <View style={[s.card, { borderLeftWidth: 3, borderLeftColor: '#ff8c00' }]}>
+              <Text style={s.cardLabel}>Add-ons total</Text>
+              <Text style={s.cardValueBig}>{fmt(stats.extrasRevenue)}</Text>
+              <Text style={s.cardHint}>
+                {pct(stats.extrasRevenue, stats.totalRevenue)} of total revenue
+              </Text>
+              <View style={{ marginTop: 12, gap: 6 }}>
+                {Object.entries(stats.extrasBreakdown).map(([label, amount]) => (
+                  <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: '#666', fontSize: 13 }}>{label}</Text>
+                    <Text style={{ color: '#1A1A1A', fontWeight: '700', fontSize: 13 }}>{fmt(amount)}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Revenue by Sales Rep */}
         <View style={s.section}>

@@ -291,7 +291,8 @@ export default function BookingDetail() {
     (sum, item) => sum + (item.fee || 0) * (item.qty || 1),
     0
   );
-  const total = (booking.basePrice || 0) - (booking.discount || 0) + specialItemsTotal;
+  const extrasTotal = booking.extrasTotal || 0;
+  const total = (booking.basePrice || 0) - (booking.discount || 0) + specialItemsTotal + extrasTotal;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -579,6 +580,19 @@ export default function BookingDetail() {
                   <Text style={styles.priceValue}>
                     ${((item.fee || 0) * (item.qty || 1)).toFixed(2)}
                   </Text>
+                </View>
+              ))}
+            </>
+          )}
+          {(booking.extras || []).length > 0 && (
+            <>
+              <Text style={styles.specialItemsHeader}>Extra Charges</Text>
+              {booking.extras.map((ex, idx) => (
+                <View key={idx} style={styles.priceRow}>
+                  <Text style={styles.priceLabel}>
+                    {ex.label}{ex.qty ? ` × ${ex.qty}` : ''}{ex.rate ? ` @ $${ex.rate}` : ''}
+                  </Text>
+                  <Text style={styles.priceValue}>${ex.amount.toFixed(2)}</Text>
                 </View>
               ))}
             </>

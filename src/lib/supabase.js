@@ -214,6 +214,26 @@ export async function fetchCustomers() {
 
 // ── MAPPERS ──
 function mapBookingFromDB(b) {
+  // Build an extras array from the agg columns so the UI can render them as
+  // a list. The DB stores totals (extra_days_fee, overweight_fee,
+  // special_items_fee) — each non-zero column becomes one line item.
+  const extras = [];
+  const extraDaysFee = parseFloat(b.extra_days_fee) || 0;
+  const extraDayRate = parseFloat(b.extra_day_rate) || 49;
+  if (extraDaysFee > 0) {
+    const qty = extraDayRate > 0 ? Math.round(extraDaysFee / extraDayRate) : 1;
+    extras.push({ type: 'extra_days', label: 'Extra Days', qty, rate: extraDayRate, amount: extraDaysFee });
+  }
+  const overweightFee = parseFloat(b.overweight_fee) || 0;
+  if (overweightFee > 0) {
+    extras.push({ type: 'overweight', label: 'Overweight', qty: null, rate: null, amount: overweightFee });
+  }
+  const specialItemsFee = parseFloat(b.special_items_fee) || 0;
+  if (specialItemsFee > 0) {
+    extras.push({ type: 'special_items', label: 'Special Items', qty: null, rate: null, amount: specialItemsFee });
+  }
+  const extrasTotal = extraDaysFee + overweightFee + specialItemsFee;
+
   return {
     id: b.id,
     bookingNumber: b.booking_number || '',
@@ -231,7 +251,9 @@ function mapBookingFromDB(b) {
     basePrice: parseFloat(b.base_price) || 0,
     discount: parseFloat(b.discount) || 0,
     specialItems: [],
-    total: parseFloat(b.base_price || 0) - parseFloat(b.discount || 0),
+    extras,
+    extrasTotal,
+    total: parseFloat(b.base_price || 0) - parseFloat(b.discount || 0) + extrasTotal,
     assignedDumpster: b.dumpster_id ? (_dumpsterLabelMap[b.dumpster_id] || b.dumpster_id) : null,
     assignedDriver: b.driver_id || null,
     notes: b.notes || '',
@@ -247,6 +269,17 @@ function mapBookingFromDB(b) {
     paidAmount: parseFloat(b.paid_amount) || 0,
     paymentStatus: b.payment_status || '',
     stripeInvoiceId: b.stripe_invoice_id || null,
+    // Raw extra-charge agg columns — needed so mapBookingToDB can round-trip
+    // them without losing values when editing.
+    extraDaysFee: extraDaysFee,
+    extraDayRate: extraDayRate,
+    overweightFee: overweightFee,
+    specialItemsFee: specialItemsFee,
+    // Schedule-time fields — for Google Calendar sync.
+    scheduledTime: b.scheduled_time || null,
+    rentalDays: b.rental_days || null,
+    lat: b.lat != null ? Number(b.lat) : null,
+    lng: b.lng != null ? Number(b.lng) : null,
     // Prefer the editable DB column if set; fall back to the legacy hardcoded
     // map for older bookings that haven't been re-attributed in the UI yet.
     generatedBy: b.sales_rep || _generatedByMap[b.booking_number] || 'asai',
@@ -264,9 +297,14 @@ function mapBookingToDB(b, companyId) {
   const addrParts = (b.deliveryAddress || '').split(',').map(s => s.trim());
   const sizeNum = parseInt((b.dumpsterSize || '').replace('yd', '')) || 10;
 
-  return {
+  // Build the DB row including ALL editable fields. Previously this dropped
+  // extras_fee, paid_at, stripe_invoice_id, sales_rep, scheduled_time —
+  // meaning edits silently lost data. Only set keys that are actually
+  // present on `b` so partial-update callers don't wipe values they didn't
+  // intend to touch.
+  const row = {
     company_id: companyId,
-    booking_number: b.id || `BK-${Date.now().toString(36).toUpperCase()}`,
+    booking_number: b.bookingNumber || b.id || `BK-${Date.now().toString(36).toUpperCase()}`,
     customer_name: b.customerName || '',
     customer_phone: b.phone || '',
     customer_email: b.email || '',
@@ -285,6 +323,28 @@ function mapBookingToDB(b, companyId) {
     notes: b.notes || '',
     source: b.source || 'phone',
   };
+
+  // Optional / write-through fields — only include if the caller set them.
+  if (b.scheduledTime !== undefined) row.scheduled_time = b.scheduledTime || null;
+  if (b.rentalDays !== undefined) row.rental_days = b.rentalDays || null;
+  if (b.lat !== undefined) row.lat = b.lat;
+  if (b.lng !== undefined) row.lng = b.lng;
+  if (b.notesFromCustomer !== undefined) row.notes_from_customer = b.notesFromCustomer;
+  if (b.billingAddress !== undefined) row.billing_address = b.billingAddress;
+  if (b.authorizedCharges !== undefined) row.authorized_charges = !!b.authorizedCharges;
+  if (b.generatedBy !== undefined) row.sales_rep = b.generatedBy;
+  // Stripe sync fields — set when a payment lands.
+  if (b.paidAt !== undefined) row.paid_at = b.paidAt || null;
+  if (b.paidAmount !== undefined) row.paid_amount = b.paidAmount;
+  if (b.paymentStatus !== undefined) row.payment_status = b.paymentStatus;
+  if (b.stripeInvoiceId !== undefined) row.stripe_invoice_id = b.stripeInvoiceId;
+  // Extra-charge aggregates — must be written so edits don't lose them.
+  if (b.extraDaysFee !== undefined) row.extra_days_fee = b.extraDaysFee || 0;
+  if (b.extraDayRate !== undefined) row.extra_day_rate = b.extraDayRate || 49;
+  if (b.overweightFee !== undefined) row.overweight_fee = b.overweightFee || 0;
+  if (b.specialItemsFee !== undefined) row.special_items_fee = b.specialItemsFee || 0;
+
+  return row;
 }
 
 function mapDumpsterFromDB(d) {
