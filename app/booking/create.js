@@ -611,6 +611,21 @@ export default function CreateBooking() {
             quantity: ex.quantity || 1,
           });
         }
+        // Map our internal dumpsterSize / material onto the endpoint's
+        // size + service_type so it picks Asaí's template footer + item
+        // description for the first line.
+        const sizeId = (dumpsterSize || '').replace('yd', '');
+        const apiSize = sizeId === '30' ? '30yd' : sizeId === '20' ? '20yd' : '10yd';
+        const matLower = (material || '').toLowerCase();
+        const apiServiceType =
+          matLower.includes('soil') || matLower.includes('dirt') ? 'clean_soil' :
+          matLower.includes('concrete') ? 'clean_concrete' :
+          matLower.includes('asphalt') ? 'clean_asphalt' :
+          matLower.includes('mixed') ? 'mixed_materials' :
+          matLower.includes('brick') ? 'bricks' :
+          matLower.includes('roof') ? 'roofing' :
+          'general_debris';
+
         const res = await fetch('https://bookingdumpsters.com/api/quotes/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -624,6 +639,14 @@ export default function CreateBooking() {
             items: lineItems,
             due_days: 14,
             notes: notes.trim() || undefined,
+            size: apiSize,
+            service_type: apiServiceType,
+            material: material || undefined,
+            booking_id: bookingId,
+            booking_number: bookingId,
+            delivery_date: deliveryDate || undefined,
+            delivery_window:
+              (DELIVERY_WINDOWS.find((w) => w.id === deliveryWindow) || {}).label || deliveryWindow || undefined,
           }),
         });
         data = await res.json();
