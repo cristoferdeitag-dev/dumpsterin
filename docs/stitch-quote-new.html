@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>New Quote - Dumpsterin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#d4d2d2",
+                        "secondary-container": "#e2dfde",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "inverse-on-surface": "#f0f1f1",
+                        "on-surface": "#1a1c1c",
+                        "tertiary-fixed": "#e4e2e2",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-background": "#1a1c1c",
+                        "on-surface-variant": "#4e4632",
+                        "primary-fixed-dim": "#f1c100",
+                        "background": "#f9f9f9",
+                        "primary-fixed": "#ffe08a",
+                        "inverse-surface": "#2f3131",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "on-error": "#ffffff",
+                        "surface-variant": "#e2e2e2",
+                        "secondary-fixed": "#e5e2e1",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#c7c6c6",
+                        "outline-variant": "#d1c5ab",
+                        "surface-bright": "#f9f9f9",
+                        "outline": "#80765f",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#636262",
+                        "surface-tint": "#745b00",
+                        "on-primary-container": "#6f5800",
+                        "surface-container-low": "#f3f3f3",
+                        "surface": "#f9f9f9",
+                        "surface-dim": "#dadada",
+                        "primary": "#745b00",
+                        "on-tertiary-fixed-variant": "#464747",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#241a00",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-container": "#5a5a5a",
+                        "on-primary-fixed-variant": "#574400",
+                        "primary-container": "#ffcd11",
+                        "inverse-primary": "#f1c100",
+                        "tertiary": "#5e5e5e",
+                        "secondary": "#5f5e5e",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-container": "#eeeeee",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-secondary-fixed-variant": "#474746"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-margin": "24px",
+                        "stack-sm": "8px",
+                        "stack-lg": "32px",
+                        "stack-md": "16px",
+                        "touch-target-min": "48px",
+                        "gutter": "16px",
+                        "unit": "8px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["DM Sans"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg-mobile": ["DM Sans"],
+                        "display-lg": ["DM Sans"],
+                        "headline-md": ["DM Sans"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["DM Sans"],
+                        "label-md": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "headline-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                        "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                        "label-md": ["14px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #FAFAFA;
+            font-family: 'Inter', sans-serif;
+        }
+        .font-headline { font-family: 'DM Sans', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface pb-32">
+<!-- Header (Sticky Top) -->
+<header class="sticky top-0 z-50 flex justify-between items-center w-full px-container-margin h-touch-target-min bg-surface border-b border-outline-variant">
+<button class="flex items-center justify-center w-10 h-10 hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined text-primary" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm font-bold text-on-surface">New Quote</h1>
+<button class="flex items-center justify-center w-10 h-10 hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="more_vert">more_vert</span>
+</button>
+</header>
+<main class="max-w-xl mx-auto px-container-margin py-stack-md space-y-stack-md">
+<!-- Customer Section -->
+<section class="bg-surface-container-lowest p-stack-md rounded-xl border border-outline-variant shadow-sm space-y-4">
+<div class="flex justify-between items-center">
+<span class="font-label-md text-label-md text-on-surface-variant">Customer</span>
+<button class="font-label-md text-label-md text-primary font-bold hover:underline">+ New customer</button>
+</div>
+<div class="relative group">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant" data-icon="search">search</span>
+<input class="w-full pl-10 pr-4 py-3 bg-surface-container-low border-none rounded-xl font-body-md text-body-md focus:ring-2 focus:ring-primary-container outline-none transition-all" placeholder="Search existing customer..." type="text"/>
+</div>
+<!-- Selected Customer Mockup -->
+<div class="flex items-center p-3 bg-surface-container-high rounded-xl border border-outline-variant">
+<img alt="John Doe" class="w-12 h-12 rounded-full border-2 border-surface" data-alt="A professional headshot of a friendly man in his 40s wearing a high-visibility safety vest and a clean cap. He is standing outdoors with a blurred industrial background featuring containers and recycling equipment. The lighting is warm and natural, suggesting a morning at a well-managed waste disposal facility. The overall mood is reliable, industrial, and highly professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRrJx7rus0SRuB5HpbkMvsrFGrQD80iqPHtJm5PTmZFWfSExSzxblf0lPZCw-uaUjuqag8JFDqA0KG-FyQ1I-tDVN-ROOYjbD_VWXhQ5smrQ-IQEnhUZh6BIDIHsZdVjrNRorXyOBh2yZB9LfZ7cBfAqtqOOldaeHtOGRfm5PbcX-w3Vk7LyQdbiDwjTuOwldo7AnOpwWFGfOM9GdZYZLE1jkmczxunjQK6Z4LCTqKFKDBKxMrd1J-uecg1Z_XUSQ_Ae-XQfE2qC6M"/>
+<div class="ml-4 flex-1">
+<p class="font-body-md text-body-md font-bold text-on-surface">John Doe</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">john@example.com</p>
+</div>
+<button class="p-2 hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="edit">edit</span>
+</button>
+</div>
+</section>
+<!-- Items Section -->
+<section class="bg-surface-container-lowest p-stack-md rounded-xl border border-outline-variant shadow-sm space-y-4">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Items</h2>
+<div class="space-y-3">
+<!-- Item 1 -->
+<div class="flex items-center p-3 bg-surface-bright rounded-lg border border-outline-variant">
+<div class="w-10 h-10 flex items-center justify-center bg-secondary-container rounded-lg">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="inventory_2">inventory_2</span>
+</div>
+<div class="ml-4 flex-1">
+<div class="flex justify-between">
+<p class="font-label-md text-label-md font-bold">20 Yard Dumpster</p>
+<p class="font-label-md text-label-md font-bold">$749.00</p>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Construction debris, 7 days</p>
+</div>
+<button class="ml-4 p-1 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</button>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center p-3 bg-surface-bright rounded-lg border border-outline-variant">
+<div class="w-10 h-10 flex items-center justify-center bg-secondary-container rounded-lg">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="tire_repair">tire_repair</span>
+</div>
+<div class="ml-4 flex-1">
+<div class="flex justify-between">
+<p class="font-label-md text-label-md font-bold">Tires (x4)</p>
+<p class="font-label-md text-label-md font-bold">$40.00</p>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Special disposal</p>
+</div>
+<button class="ml-4 p-1 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</button>
+</div>
+</div>
+<button class="w-full py-4 border-2 border-dashed border-outline-variant rounded-xl text-on-surface-variant hover:bg-surface-container-high transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+<span class="font-label-md text-label-md">Add item</span>
+</button>
+</section>
+<!-- Discount/Notes Section -->
+<section class="bg-surface-container-lowest p-stack-md rounded-xl border border-outline-variant shadow-sm space-y-4">
+<div class="space-y-4">
+<div>
+<label class="block font-label-md text-label-md text-on-surface-variant mb-2">Discount</label>
+<div class="flex gap-2">
+<input class="flex-1 px-4 py-2 bg-surface-container-low border-1.5 border-outline-variant rounded-lg focus:ring-2 focus:ring-primary-container outline-none" placeholder="0.00" type="text"/>
+<div class="flex border border-outline-variant rounded-lg overflow-hidden">
+<button class="px-4 py-2 bg-primary-container text-on-primary-container font-bold">$</button>
+<button class="px-4 py-2 bg-surface-container-high text-on-surface-variant font-bold border-l border-outline-variant">%</button>
+</div>
+</div>
+</div>
+<div>
+<label class="block font-label-md text-label-md text-on-surface-variant mb-2">Notes for customer (optional)</label>
+<textarea class="w-full px-4 py-2 bg-surface-container-low border-1.5 border-outline-variant rounded-lg focus:ring-2 focus:ring-primary-container outline-none font-body-sm text-body-sm" placeholder="Add specific instructions or terms..." rows="3"></textarea>
+</div>
+</div>
+</section>
+<!-- Totals Section -->
+<section class="bg-primary-container/10 p-stack-md rounded-xl border border-primary-container shadow-sm">
+<div class="space-y-2 border-b border-primary-container/20 pb-4">
+<div class="flex justify-between text-on-surface-variant font-body-sm">
+<span>Subtotal</span>
+<span>$789.00</span>
+</div>
+<div class="flex justify-between text-on-surface-variant font-body-sm">
+<span>Tax (8%)</span>
+<span>$63.12</span>
+</div>
+</div>
+<div class="pt-4 flex justify-between items-end">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block uppercase tracking-wider">Total Amount</span>
+<span class="font-headline-md text-headline-md font-bold text-on-surface">$852.12</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant italic">Due in 14 days</span>
+</div>
+</section>
+<!-- Settings Section -->
+<section class="bg-surface-container-lowest p-stack-md rounded-xl border border-outline-variant shadow-sm space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="mail">mail</span>
+<span class="font-body-md text-body-md">Send via email</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="sms">sms</span>
+<span class="font-body-md text-body-md">Send via SMS</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="pt-2">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-2">Days until due</label>
+<div class="relative">
+<select class="w-full appearance-none px-4 py-3 bg-surface-container-low border-1.5 border-outline-variant rounded-lg font-body-md text-body-md outline-none focus:ring-2 focus:ring-primary-container">
+<option>7 days</option>
+<option selected="">14 days</option>
+<option>30 days</option>
+<option>Custom</option>
+</select>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Sticky Footer -->
+<footer class="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center h-24 bg-surface px-container-margin gap-4 border-t border-outline-variant shadow-2xl">
+<button class="flex-1 h-touch-target-min border-2 border-outline text-on-surface font-bold rounded-xl hover:bg-surface-container-high transition-colors">
+            Save as Draft
+        </button>
+<button class="flex-1 h-touch-target-min bg-primary-container text-on-primary-container font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform">
+            Send Quote
+            <span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</footer>
+</body></html>
