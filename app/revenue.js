@@ -78,6 +78,9 @@ function getDateRange(filterId) {
   }
 }
 
+import { fetchProviderTransactions, summarizeFinancial } from '../src/lib/transactionsApi';
+import { useEffect } from 'react';
+
 export default function RevenueScreen() {
   const router = useRouter();
   const { state } = useApp();
@@ -93,6 +96,12 @@ export default function RevenueScreen() {
   // by paidAt + sum paidAmount (when the money landed) — answers "how much
   // did we collect this month?", matches Stripe deposits.
   const [basis, setBasis] = useState('service');
+
+  // 'operational' (default) = read from bookings table (legacy view).
+  // 'financial' = read from transactions ledger (real money in/out + fees).
+  const [mode, setMode] = useState('operational');
+  const [financialSummary, setFinancialSummary] = useState(null);
+  const [financialLoading, setFinancialLoading] = useState(false);
 
   const now = new Date();
   const currentYM = now.toISOString().slice(0, 7);
@@ -237,6 +246,35 @@ export default function RevenueScreen() {
     return labels[name] || name.charAt(0).toUpperCase() + name.slice(1);
   };
 
+  // Fetch ledger rows when the user switches to the financial view. The
+  // bookings-based view above is unchanged — this is a pure addition.
+  useEffect(() => {
+    if (mode !== 'financial') return;
+    const range = dateFilter === 'custom'
+      ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
+      : getDateRange(dateFilter);
+    setFinancialLoading(true);
+    const fromISO = new Date(`${range.start}T00:00:00Z`).toISOString();
+    const toISO = new Date(`${range.end}T23:59:59Z`).toISOString();
+    fetchProviderTransactions(fromISO, toISO)
+      .then((rows) => setFinancialSummary(summarizeFinancial(rows)))
+      .finally(() => setFinancialLoading(false));
+  }, [mode, dateFilter, customStart, customEnd]);
+
+  // "Sold" (operational) = total of bookings in range — used to show drift
+  // between sold and collected on the financial view.
+  const operationalSoldCents = useMemo(() => {
+    const range = dateFilter === 'custom'
+      ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
+      : getDateRange(dateFilter);
+    const inRange = bookings.filter((b) => {
+      if (b.status === 'cancelled') return false;
+      const d = b.deliveryDate || '';
+      return d >= range.start && d <= range.end;
+    });
+    return Math.round(inRange.reduce((sum, b) => sum + (b.total || 0), 0) * 100);
+  }, [bookings, dateFilter, customStart, customEnd]);
+
   return (
     <SafeAreaView style={s.safe}>
       {/* Header */}
@@ -249,33 +287,63 @@ export default function RevenueScreen() {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
-        {/* Basis toggle — Service (when delivered) vs Cash (when paid).
-            Service is the default; Cash matches Stripe deposits. */}
-        <View style={{ flexDirection: 'row', backgroundColor: '#F0F0F0', borderRadius: 9999, padding: 4, marginBottom: 12, alignSelf: 'flex-start' }}>
+        {/* Mode toggle — Operational (bookings-based) vs Financial (ledger-based).
+            Operational answers "what did I sell?"; Financial answers "what did
+            I actually collect after refunds + Stripe fees?". The Operational
+            mode keeps the legacy view intact. */}
+        <View style={{ flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 9999, padding: 4, marginBottom: 14, alignSelf: 'flex-start' }}>
           {[
-            { id: 'service', label: 'By Delivery', hint: 'When the dumpster ships' },
-            { id: 'cash', label: 'By Payment', hint: 'When the cash landed' },
+            { id: 'operational', label: 'Operational' },
+            { id: 'financial', label: 'Financial' },
           ].map((opt) => (
             <TouchableOpacity
               key={opt.id}
-              onPress={() => setBasis(opt.id)}
+              onPress={() => setMode(opt.id)}
               style={{
-                paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
-                backgroundColor: basis === opt.id ? '#FFFFFF' : 'transparent',
+                paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999,
+                backgroundColor: mode === opt.id ? '#FFCD11' : 'transparent',
               }}
             >
               <Text style={{
-                color: basis === opt.id ? '#FF8C00' : '#666',
-                fontSize: 13, fontWeight: basis === opt.id ? '700' : '500',
+                color: mode === opt.id ? '#1A1A1A' : '#FFF',
+                fontSize: 13, fontWeight: mode === opt.id ? '800' : '500',
               }}>{opt.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={{ fontSize: 11, color: '#888', marginBottom: 14, marginLeft: 4 }}>
-          {basis === 'cash'
-            ? 'Showing revenue by when payment hit (matches Stripe).'
-            : 'Showing revenue by when service was delivered (operational view).'}
-        </Text>
+
+        {/* Basis toggle — Service (when delivered) vs Cash (when paid).
+            Service is the default; Cash matches Stripe deposits.
+            Hidden in Financial mode because that view sums real transactions. */}
+        {mode === 'operational' && (
+          <>
+            <View style={{ flexDirection: 'row', backgroundColor: '#F0F0F0', borderRadius: 9999, padding: 4, marginBottom: 12, alignSelf: 'flex-start' }}>
+              {[
+                { id: 'service', label: 'By Delivery', hint: 'When the dumpster ships' },
+                { id: 'cash', label: 'By Payment', hint: 'When the cash landed' },
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.id}
+                  onPress={() => setBasis(opt.id)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
+                    backgroundColor: basis === opt.id ? '#FFFFFF' : 'transparent',
+                  }}
+                >
+                  <Text style={{
+                    color: basis === opt.id ? '#FF8C00' : '#666',
+                    fontSize: 13, fontWeight: basis === opt.id ? '700' : '500',
+                  }}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={{ fontSize: 11, color: '#888', marginBottom: 14, marginLeft: 4 }}>
+              {basis === 'cash'
+                ? 'Showing revenue by when payment hit (matches Stripe).'
+                : 'Showing revenue by when service was delivered (operational view).'}
+            </Text>
+          </>
+        )}
 
         {/* Date Filter */}
         <View style={{ marginBottom: 16 }}>
@@ -357,7 +425,69 @@ export default function RevenueScreen() {
           </Modal>
         </View>
 
-        {/* Summary Cards */}
+        {/* ---------- Financial mode: cards from the transactions ledger ---------- */}
+        {mode === 'financial' && (
+          <View>
+            {financialLoading && (
+              <Text style={{ color: '#999', padding: 12 }}>Loading ledger…</Text>
+            )}
+            {!financialLoading && financialSummary && (
+              <>
+                {(() => {
+                  const fs = financialSummary;
+                  const sold = operationalSoldCents;
+                  const collected = fs.gross_inflow_cents;
+                  const diff = sold - collected;
+                  return (
+                    <>
+                      <View style={s.cardsRow}>
+                        <View style={[s.card, { flex: 1, borderLeftWidth: 3, borderLeftColor: '#00C853' }]}>
+                          <Text style={s.cardLabel}>💰 Net to your bank</Text>
+                          <Text style={s.cardValueBig}>{fmt(fs.net_to_bank_cents / 100)}</Text>
+                          <Text style={s.cardHint}>After refunds + Stripe fees</Text>
+                        </View>
+                      </View>
+                      <View style={s.cardsRow}>
+                        <View style={[s.card, s.cardHalf]}>
+                          <Text style={s.cardLabel}>Sold (operational)</Text>
+                          <Text style={s.cardValue}>{fmt(sold / 100)}</Text>
+                        </View>
+                        <View style={[s.card, s.cardHalf]}>
+                          <Text style={s.cardLabel}>Collected</Text>
+                          <Text style={s.cardValue}>{fmt(collected / 100)}</Text>
+                        </View>
+                      </View>
+                      {diff > 0 && (
+                        <View style={[s.card, { backgroundColor: '#FFFBEA', borderLeftWidth: 3, borderLeftColor: '#FFC107', marginBottom: 12 }]}>
+                          <Text style={s.cardLabel}>⚠️ Difference vs sold</Text>
+                          <Text style={[s.cardValue, { color: '#C77700' }]}>{fmt(diff / 100)}</Text>
+                          <Text style={s.cardHint}>Likely quotes_sent that have not been paid yet.</Text>
+                        </View>
+                      )}
+                      <View style={s.section}>
+                        <Text style={s.sectionTitle}>Where the money came from</Text>
+                        <FinRow label="Marketplace (BD) payout" cents={fs.marketplace_payout_cents} count={fs.count_marketplace} />
+                        <FinRow label="My own quotes (Stripe card)" cents={fs.provider_invoice_card_cents} count={fs.count_provider_invoice_card} />
+                        <FinRow label="Cash / Zelle / check (out-of-band)" cents={fs.provider_invoice_oob_cents} count={fs.count_provider_invoice_oob} />
+                      </View>
+                      <View style={s.section}>
+                        <Text style={s.sectionTitle}>Costs / outflows</Text>
+                        <FinRow label="Refunds issued" cents={-fs.refund_cents} count={fs.count_refunds} negative />
+                        <FinRow label="Chargebacks" cents={-fs.chargeback_cents} negative />
+                        <FinRow label="Stripe processing fees" cents={-fs.stripe_fee_cents} negative />
+                      </View>
+                    </>
+                  );
+                })()}
+              </>
+            )}
+            <View style={{ height: 40 }} />
+          </View>
+        )}
+
+        {/* ---------- Operational mode: legacy bookings-based stats ---------- */}
+        {mode === 'operational' && (
+          <>
         <View style={s.cardsRow}>
           <View style={[s.card, { flex: 1 }]}>
             <Text style={s.cardLabel}>Total Projected</Text>
@@ -538,8 +668,25 @@ export default function RevenueScreen() {
         </View>
 
         <View style={{ height: 40 }} />
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// Small helper for financial rows: label on the left, money on the right.
+function FinRow({ label, cents, count, negative }) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
+      <View>
+        <Text style={{ fontSize: 13, color: '#1A1A1A', fontWeight: '600' }}>{label}</Text>
+        {count != null && <Text style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{count} {count === 1 ? 'transaction' : 'transactions'}</Text>}
+      </View>
+      <Text style={{ fontSize: 15, fontWeight: '700', color: negative ? '#C00' : '#1A1A1A' }}>
+        {negative && cents < 0 ? '-' : ''}${Math.abs((cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </Text>
+    </View>
   );
 }
 
