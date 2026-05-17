@@ -16,6 +16,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
 import { useAppActions } from '../../src/context/AppActions';
+import { useAuth } from '../../src/context/AuthContext';
+import { searchCustomers } from '../../src/lib/customersApi';
 import {
   DUMPSTER_SIZES,
   SERVICE_TYPES,
@@ -248,6 +250,7 @@ export default function CreateBooking() {
   const router = useRouter();
   const { state } = useApp();
   const { addBooking, updateBooking } = useAppActions();
+  const { companyId } = useAuth();
   const { copyFrom } = useLocalSearchParams();
 
   // Customer fields
@@ -256,6 +259,32 @@ export default function CreateBooking() {
   const [email, setEmail] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  // CRM autocomplete — pulls from the customers table (RLS-scoped).
+  const [crmSuggestions, setCrmSuggestions] = useState([]);
+  useEffect(() => {
+    if (!name || name.length < 2) {
+      setCrmSuggestions([]);
+      return;
+    }
+    let stale = false;
+    const t = setTimeout(async () => {
+      const rows = await searchCustomers(name);
+      if (!stale) setCrmSuggestions(rows.slice(0, 5));
+    }, 200);
+    return () => { stale = true; clearTimeout(t); };
+  }, [name]);
+  function selectCrmSuggestion(c) {
+    setName(c.full_name || '');
+    setEmail(c.email || '');
+    setPhone(c.phone || '');
+    if (c.billing_address?.street) {
+      setBillingAddress(c.billing_address.street);
+      if (c.billing_address.city) setBillingCity(c.billing_address.city);
+      if (c.billing_address.state) setBillingState(c.billing_address.state);
+      if (c.billing_address.zip) setBillingZip(c.billing_address.zip);
+    }
+    setCrmSuggestions([]);
+  }
 
   // Addresses
   const [billingAddress, setBillingAddress] = useState('');
@@ -568,24 +597,38 @@ export default function CreateBooking() {
 
       let data;
       try {
-        const res = await fetch('https://tpdumpsters.com/api/invoice', {
+        if (!companyId) throw new Error('Provider not resolved yet — reload and retry.');
+        // Map our local items + extras into the BD /api/quotes/create shape.
+        const lineItems = items.map((it) => ({
+          description: `${it.serviceType} ${it.size}${it.quantity > 1 ? ` x${it.quantity}` : ''}`,
+          amount_cents: Math.round((it.customPrice || 0) * 100),
+          quantity: it.quantity || 1,
+        }));
+        for (const ex of extras) {
+          lineItems.push({
+            description: ex.name,
+            amount_cents: Math.round(ex.price * 100),
+            quantity: ex.quantity || 1,
+          });
+        }
+        const res = await fetch('https://bookingdumpsters.com/api/quotes/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            bookingId,
-            customerName: name.trim(),
-            customerEmail: email.trim(),
-            customerPhone: phone.trim(),
-            billingAddress: fullBillingAddress,
-            deliveryAddress: fullDeliveryAddress,
-            items,
-            extras,
-            notes: notes.trim(),
+            provider_id: companyId,
+            customer: {
+              name: name.trim(),
+              email: email.trim(),
+              phone: phone.trim() || null,
+            },
+            items: lineItems,
+            due_days: 14,
+            notes: notes.trim() || undefined,
           }),
         });
         data = await res.json();
-        if (!res.ok || !data.id) {
-          throw new Error(data?.error || `Invoice API returned ${res.status}`);
+        if (!res.ok || !data.invoice_id) {
+          throw new Error(data?.error || `Quote API returned ${res.status}`);
         }
       } catch (err) {
         Alert.alert(
@@ -608,14 +651,9 @@ export default function CreateBooking() {
         return;
       }
 
-      const channel = data.sentEmail
-        ? `email a ${email.trim()}`
-        : data.sentSms
-        ? `SMS a ${phone.trim()}`
-        : 'creada (no se envió notificación)';
       Alert.alert(
-        'Quote enviada',
-        `Invoice ${data.number || data.id} enviada por ${channel}.\nMonto: $${data.amount || total}`,
+        'Quote sent',
+        `Invoice ${data.invoice_number || data.invoice_id} sent to ${email.trim()}.\nAmount: $${((data.amount_due_cents || 0) / 100).toFixed(2)}`
       );
       router.back();
     } catch (err) {
@@ -721,10 +759,30 @@ export default function CreateBooking() {
                 ))}
               </View>
             )}
-            {filteredCustomers.length === 0 && name.length >= 2 && showCustomerDropdown && (
+            {/* CRM autocomplete — from our `customers` table. Distinct from
+                the Stripe-search results above so the provider can pick
+                from their own CRM history first. */}
+            {crmSuggestions.length > 0 && (
+              <View style={s.acDropdown}>
+                {crmSuggestions.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={s.acItem}
+                    onPress={() => selectCrmSuggestion(c)}
+                  >
+                    <Ionicons name="people-outline" size={18} color={primaryLight} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.acMainText}>{c.full_name}{c.bookings_count > 0 ? ` · ${c.bookings_count} bookings` : ''}</Text>
+                      <Text style={s.acSecText}>{c.email || c.phone}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {filteredCustomers.length === 0 && crmSuggestions.length === 0 && name.length >= 2 && showCustomerDropdown && (
               <View style={s.acHintRow}>
                 <Ionicons name="search-outline" size={13} color={textMuted} />
-                <Text style={s.acHintText}>No matching customers in Stripe</Text>
+                <Text style={s.acHintText}>No matching customers</Text>
               </View>
             )}
           </View>
