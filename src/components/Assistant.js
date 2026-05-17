@@ -308,14 +308,15 @@ function renderRichText(content, extraTextStyle) {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    // Tab bar is 72px tall; lift the FAB above it so it doesn't overlap the
-    // Settings icon at the right end of the bottom nav.
+    // Bottom-LEFT so it doesn't collide with the per-screen primary FAB on
+    // the right (e.g. "+" new booking on the Bookings tab). Tab bar sits at
+    // ~72px so we offset 88px to clear it.
     bottom: 88,
-    right: 20,
+    left: 20,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: C.primaryDark,
+    backgroundColor: C.primary,         // CAT yellow per the new brand
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',

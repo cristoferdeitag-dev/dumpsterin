@@ -1,0 +1,8 @@
+# SPA routing: any URL that doesn't match a real file falls back to index.html
+# so client-side routes (e.g. /quotes/new, /booking/[id]) resolve correctly.
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
