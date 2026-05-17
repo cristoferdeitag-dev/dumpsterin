@@ -32,7 +32,7 @@ function RouteGuard({ children }) {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color="#ff8c00" />
+        <ActivityIndicator size="large" color="#FFCD11" />
       </View>
     );
   }

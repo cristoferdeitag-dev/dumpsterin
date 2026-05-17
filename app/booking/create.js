@@ -35,8 +35,8 @@ const border = '#333333';
 const textColor = '#333333';
 const textSecondary = '#666666';
 const textMuted = '#AAAAAA';
-const primary = '#ff8c00';
-const primaryLight = '#ffb77d';
+const primary = '#FFCD11';
+const primaryLight = '#FFE066';
 const primaryDark = '#CC5500';
 const success = '#00C853';
 const danger = '#FF3D00';
@@ -1271,7 +1271,7 @@ export default function CreateBooking() {
           <View style={{ marginTop: 20, gap: 12 }}>
             {/* Send Quote */}
             <TouchableOpacity
-              style={[s.submitBtn, { backgroundColor: '#ff8c00' }]}
+              style={[s.submitBtn, { backgroundColor: '#FFCD11' }]}
               onPress={handleSendQuote}
               activeOpacity={0.85}
               disabled={sendingQuote}

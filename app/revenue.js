@@ -21,8 +21,8 @@ const C = {
   surfaceHigh: '#EEEEEE',
   surfaceHighest: '#E8E8E8',
   surfaceLowest: '#F0F0F0',
-  primary: '#ffb77d',
-  primaryContainer: '#ff8c00',
+  primary: '#FFE066',
+  primaryContainer: '#FFCD11',
   onPrimary: '#4d2600',
   onSurface: '#1A1A1A',
   onSurfaceVariant: '#666666',
@@ -331,7 +331,7 @@ export default function RevenueScreen() {
                   }}
                 >
                   <Text style={{
-                    color: basis === opt.id ? '#FF8C00' : '#666',
+                    color: basis === opt.id ? '#FFCD11' : '#666',
                     fontSize: 13, fontWeight: basis === opt.id ? '700' : '500',
                   }}>{opt.label}</Text>
                 </TouchableOpacity>
@@ -355,7 +355,7 @@ export default function RevenueScreen() {
                   onPress={() => setDateFilter(f.id)}
                   style={{
                     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999,
-                    backgroundColor: dateFilter === f.id ? '#FF8C00' : '#F0F0F0',
+                    backgroundColor: dateFilter === f.id ? '#FFCD11' : '#F0F0F0',
                   }}
                 >
                   <Text style={{
@@ -372,7 +372,7 @@ export default function RevenueScreen() {
                 onPress={() => setShowStartCal(true)}
                 style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
               >
-                <Ionicons name="calendar-outline" size={16} color={customStart ? '#FF8C00' : '#AAA'} />
+                <Ionicons name="calendar-outline" size={16} color={customStart ? '#FFCD11' : '#AAA'} />
                 <Text style={{ fontSize: 14, color: customStart ? '#333' : '#AAA' }}>
                   {customStart || 'Start date'}
                 </Text>
@@ -381,7 +381,7 @@ export default function RevenueScreen() {
                 onPress={() => setShowEndCal(true)}
                 style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
               >
-                <Ionicons name="calendar-outline" size={16} color={customEnd ? '#FF8C00' : '#AAA'} />
+                <Ionicons name="calendar-outline" size={16} color={customEnd ? '#FFCD11' : '#AAA'} />
                 <Text style={{ fontSize: 14, color: customEnd ? '#333' : '#AAA' }}>
                   {customEnd || 'End date'}
                 </Text>
@@ -398,9 +398,9 @@ export default function RevenueScreen() {
                   <TouchableOpacity onPress={() => setShowStartCal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
                 </View>
                 <Calendar
-                  theme={{ selectedDayBackgroundColor: '#FF8C00', todayTextColor: '#FF8C00', arrowColor: '#FF8C00' }}
+                  theme={{ selectedDayBackgroundColor: '#FFCD11', todayTextColor: '#FFCD11', arrowColor: '#FFCD11' }}
                   onDayPress={(day) => { setCustomStart(day.dateString); setShowStartCal(false); }}
-                  markedDates={{ [customStart]: { selected: true, selectedColor: '#FF8C00' } }}
+                  markedDates={{ [customStart]: { selected: true, selectedColor: '#FFCD11' } }}
                 />
               </View>
             </TouchableOpacity>
@@ -415,9 +415,9 @@ export default function RevenueScreen() {
                   <TouchableOpacity onPress={() => setShowEndCal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
                 </View>
                 <Calendar
-                  theme={{ selectedDayBackgroundColor: '#FF8C00', todayTextColor: '#FF8C00', arrowColor: '#FF8C00' }}
+                  theme={{ selectedDayBackgroundColor: '#FFCD11', todayTextColor: '#FFCD11', arrowColor: '#FFCD11' }}
                   onDayPress={(day) => { setCustomEnd(day.dateString); setShowEndCal(false); }}
-                  markedDates={{ [customEnd]: { selected: true, selectedColor: '#FF8C00' } }}
+                  markedDates={{ [customEnd]: { selected: true, selectedColor: '#FFCD11' } }}
                   minDate={customStart || undefined}
                 />
               </View>
@@ -501,7 +501,7 @@ export default function RevenueScreen() {
             <Text style={s.cardValueBig}>{fmt(stats.closedRevenue)}</Text>
             <Text style={s.cardHint}>{stats.closedCount} bookings</Text>
           </View>
-          <View style={[s.card, s.cardHalf, { borderLeftWidth: 3, borderLeftColor: '#ff8c00' }]}>
+          <View style={[s.card, s.cardHalf, { borderLeftWidth: 3, borderLeftColor: '#FFCD11' }]}>
             <Text style={s.cardLabel}>📅 Expected</Text>
             <Text style={s.cardValueBig}>{fmt(stats.expectedRevenue)}</Text>
             <Text style={s.cardHint}>{stats.expectedCount} scheduled</Text>
@@ -522,7 +522,7 @@ export default function RevenueScreen() {
         {stats.extrasRevenue > 0 && (
           <View style={[s.section, { paddingTop: 4 }]}>
             <Text style={s.sectionTitle}>Extras Revenue</Text>
-            <View style={[s.card, { borderLeftWidth: 3, borderLeftColor: '#ff8c00' }]}>
+            <View style={[s.card, { borderLeftWidth: 3, borderLeftColor: '#FFCD11' }]}>
               <Text style={s.cardLabel}>Add-ons total</Text>
               <Text style={s.cardValueBig}>{fmt(stats.extrasRevenue)}</Text>
               <Text style={s.cardHint}>
@@ -568,7 +568,7 @@ export default function RevenueScreen() {
                       position: 'absolute',
                       left: `${(rep.closed / maxRepRevenue) * 100}%`,
                       width: `${(rep.expected / maxRepRevenue) * 100}%`,
-                      backgroundColor: '#ff8c00',
+                      backgroundColor: '#FFCD11',
                       opacity: 0.7,
                     },
                   ]}
@@ -576,7 +576,7 @@ export default function RevenueScreen() {
               </View>
               <View style={[s.repMeta, { marginTop: 4 }]}>
                 <Text style={[s.repMetaText, { color: '#00b5fc' }]}>✅ {fmt(rep.closed)}</Text>
-                <Text style={[s.repMetaText, { color: '#ff8c00' }]}>📅 {fmt(rep.expected)}</Text>
+                <Text style={[s.repMetaText, { color: '#FFCD11' }]}>📅 {fmt(rep.expected)}</Text>
               </View>
             </View>
           ))}

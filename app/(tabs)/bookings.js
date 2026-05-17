@@ -7,11 +7,11 @@ import { useApp } from '../../src/context/AppContext';
 const STATUS_COLORS = {
   quote_sent: '#999999',
   scheduled: '#60a5fa',
-  in_transit: '#ffb77d',
+  in_transit: '#FFE066',
   on_site: '#00C853',
   ready_for_pickup: '#00b5fc',
   picked_up: '#85cfff',
-  dumping: '#FF8C00',
+  dumping: '#FFCD11',
   completed: '#999999',
   cancelled: '#ffb4ab',
 };
@@ -201,7 +201,7 @@ export default function BookingsScreen() {
               }}>
                 Base Rate
               </Text>
-              <Text style={{ color: '#ffb77d', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>
+              <Text style={{ color: '#FFE066', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>
                 ${booking.basePrice?.toFixed(2) || '0.00'}
               </Text>
             </View>
@@ -284,7 +284,7 @@ export default function BookingsScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={{
-                  color: detailFilter === filter.id ? '#ffb77d' : '#666666',
+                  color: detailFilter === filter.id ? '#FFE066' : '#666666',
                   fontSize: 13,
                   fontWeight: detailFilter === filter.id ? '700' : '500',
                 }}>
@@ -329,10 +329,10 @@ export default function BookingsScreen() {
           width: 56,
           height: 56,
           borderRadius: 16,
-          backgroundColor: '#ff8c00',
+          backgroundColor: '#FFCD11',
           alignItems: 'center',
           justifyContent: 'center',
-          shadowColor: '#ff8c00',
+          shadowColor: '#FFCD11',
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.4,
           shadowRadius: 12,

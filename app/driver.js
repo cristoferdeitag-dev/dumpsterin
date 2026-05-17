@@ -29,8 +29,8 @@ const C = {
   surface_container_high: '#EEEEEE',
   surface_container_highest: '#E8E8E8',
   surface_container_lowest: '#F0F0F0',
-  primary: '#ffb77d',
-  primary_container: '#ff8c00',
+  primary: '#FFE066',
+  primary_container: '#FFCD11',
   on_primary: '#4d2600',
   on_surface: '#1A1A1A',
   on_surface_variant: '#666666',
@@ -147,14 +147,14 @@ export default function DriverScreen() {
               return (
                 <View key={booking.id + '-upcoming'} style={{
                   backgroundColor: '#F7F7F7', borderRadius: 12, padding: 16, marginBottom: 10,
-                  borderLeftWidth: 4, borderLeftColor: isPickup ? '#ff5252' : '#FF8C00',
+                  borderLeftWidth: 4, borderLeftColor: isPickup ? '#ff5252' : '#FFCD11',
                 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <View style={{
                       backgroundColor: isPickup ? 'rgba(255,82,82,0.1)' : 'rgba(255,140,0,0.1)',
                       paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999,
                     }}>
-                      <Text style={{ fontSize: 10, fontWeight: '800', color: isPickup ? '#ff5252' : '#FF8C00', textTransform: 'uppercase', letterSpacing: 1 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: isPickup ? '#ff5252' : '#FFCD11', textTransform: 'uppercase', letterSpacing: 1 }}>
                         {isPickup ? 'PICKUP' : 'DELIVERY'}
                       </Text>
                     </View>

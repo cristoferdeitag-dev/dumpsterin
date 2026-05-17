@@ -60,7 +60,7 @@ const SERVICE_ZIPS = {
 
 const STATUS_COLORS = {
   scheduled: '#60a5fa',
-  in_transit: '#ffb77d',
+  in_transit: '#FFE066',
   delivered: '#999999',
   pickup_ready: '#00b5fc',
   picked_up: '#85cfff',
@@ -213,7 +213,7 @@ export default function HomeScreen() {
                 Total Revenue
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                <Text style={{ color: '#ffb77d', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+                <Text style={{ color: '#FFE066', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
                   {hideRevenue ? '••••••' : formatCurrency(stats.totalRevenue)}
                 </Text>
                 {!hideRevenue && stats.revenueChange !== null && (
@@ -263,7 +263,7 @@ export default function HomeScreen() {
                 <Text style={{ color: '#999999', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>
                   {displayName}
                 </Text>
-                <Text style={{ color: '#FF8C00', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
+                <Text style={{ color: '#FFCD11', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
                   {hideRevenue ? '••••' : formatCurrency(rev)}
                 </Text>
               </View>
@@ -307,7 +307,7 @@ export default function HomeScreen() {
             </View>
             <View style={{ flex: 1, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}>
               <Text style={{ color: '#666666', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Deployed</Text>
-              <Text style={{ color: '#ffb77d', fontSize: 18, fontWeight: '800', marginTop: 2 }}>{stats.deployedUnits}</Text>
+              <Text style={{ color: '#FFE066', fontSize: 18, fontWeight: '800', marginTop: 2 }}>{stats.deployedUnits}</Text>
             </View>
             <View style={{ flex: 1, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}>
               <Text style={{ color: '#666666', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Service</Text>
@@ -318,7 +318,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/map')}
             style={{
-              backgroundColor: '#ff8c00',
+              backgroundColor: '#FFCD11',
               paddingHorizontal: 16,
               paddingVertical: 10,
               borderRadius: 8,
@@ -353,7 +353,7 @@ export default function HomeScreen() {
             </Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/bookings')}>
               <Text style={{
-                color: '#ff8c00',
+                color: '#FFCD11',
                 fontSize: 10,
                 fontWeight: '600',
                 letterSpacing: 2,
@@ -422,7 +422,7 @@ export default function HomeScreen() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                 }}>
-                  <Text style={{ color: '#ffb77d', fontWeight: '700', fontSize: 15 }}>
+                  <Text style={{ color: '#FFE066', fontWeight: '700', fontSize: 15 }}>
                     ${booking.total?.toFixed(2)}
                   </Text>
                   <Text style={{

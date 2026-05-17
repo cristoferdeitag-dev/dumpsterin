@@ -616,7 +616,7 @@ export default function BookingDetail() {
         {/* Extra Charge Button */}
         {booking.status !== 'cancelled' && (
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#ff8c00', marginHorizontal: 16, marginBottom: 12 }]}
+            style={[styles.actionBtn, { backgroundColor: '#FFCD11', marginHorizontal: 16, marginBottom: 12 }]}
             onPress={() => setShowExtraCharge(true)}
           >
             <Ionicons name="cash-outline" size={20} color="#4d2600" />
@@ -641,10 +641,10 @@ export default function BookingDetail() {
                       paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
                       backgroundColor: chargeType === t.id ? 'rgba(255,140,0,0.2)' : bgElevated,
                       borderWidth: chargeType === t.id ? 1 : 0,
-                      borderColor: '#ff8c00',
+                      borderColor: '#FFCD11',
                     }}
                   >
-                    <Text style={{ color: chargeType === t.id ? '#ffb77d' : textSecondary, fontSize: 13, fontWeight: '600' }}>
+                    <Text style={{ color: chargeType === t.id ? '#FFE066' : textSecondary, fontSize: 13, fontWeight: '600' }}>
                       {t.label}{t.rate ? ` ($${t.rate})` : ''}
                     </Text>
                   </TouchableOpacity>
@@ -685,7 +685,7 @@ export default function BookingDetail() {
               {chargeType && (
                 <View style={{ backgroundColor: bgElevated, borderRadius: 12, padding: 14, marginBottom: 16 }}>
                   <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 1 }}>CHARGE AMOUNT</Text>
-                  <Text style={{ color: '#ffb77d', fontSize: 28, fontWeight: '800', marginTop: 4 }}>
+                  <Text style={{ color: '#FFE066', fontSize: 28, fontWeight: '800', marginTop: 4 }}>
                     ${chargeType === 'custom'
                       ? (parseFloat(chargeAmount) || 0).toFixed(2)
                       : ((EXTRA_CHARGE_TYPES.find(t => t.id === chargeType)?.rate || 0) * (parseFloat(chargeQty) || 1)).toFixed(2)
@@ -697,7 +697,7 @@ export default function BookingDetail() {
               {/* Action Buttons */}
               <View style={{ gap: 10 }}>
                 <TouchableOpacity
-                  style={{ backgroundColor: '#ff8c00', paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  style={{ backgroundColor: '#FFCD11', paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
                   onPress={() => handleExtraCharge('auto')}
                   disabled={chargingExtra}
                 >

@@ -302,7 +302,7 @@ export default function MapScreen() {
               onSubmitEditing={searchZipOnMap}
             />
           </View>
-          <TouchableOpacity onPress={searchZipOnMap} style={{ backgroundColor: '#ff8c00', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 }}>
+          <TouchableOpacity onPress={searchZipOnMap} style={{ backgroundColor: '#FFCD11', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 }}>
             <Text style={{ color: '#4d2600', fontWeight: '700', fontSize: 13 }}>Check</Text>
           </TouchableOpacity>
         </View>

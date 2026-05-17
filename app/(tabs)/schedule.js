@@ -15,7 +15,7 @@ const C = {
   surface_lower: '#F3F3F3',
   surface_high: '#E8E8E8',
   border: 'rgba(221,193,174,0.25)',
-  primary: '#FF8C00',
+  primary: '#FFCD11',
   primary_soft: '#FFE5C9',
   on_primary: '#FFFFFF',
   on_surface: '#1A1C1C',
@@ -23,7 +23,7 @@ const C = {
   // Event types
   delivery: '#1976D2',
   delivery_bg: 'rgba(25,118,210,0.15)',
-  pickup: '#FF8C00',
+  pickup: '#FFCD11',
   pickup_bg: 'rgba(255,140,0,0.15)',
   swap: '#7B1FA2',
   swap_bg: 'rgba(123,31,162,0.15)',
