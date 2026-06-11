@@ -4,7 +4,7 @@ const SUPABASE_URL = 'https://mbirzaocjkhqydtuqmze.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1iaXJ6YW9jamtocXlkdHVxbXplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NjkxNTUsImV4cCI6MjA5MTE0NTE1NX0.-ERkDAXi5YOsy-CdmEEMKDUgpXQQcgJt0HY0b7t2SuA';
 
 const CALENDAR_PUSH_URL = 'https://tpdumpsters.com/api/calendar/push';
-const CALENDAR_PUSH_SECRET = 'tp-dumpsters-calpush-2026';
+const CALENDAR_PUSH_SECRET = process.env.EXPO_PUBLIC_CALENDAR_PUSH_SECRET || '';
 
 // Fire-and-forget push to Google Calendar after a booking CRUD. Errors are
 // logged but never block the UI — calendar sync is best-effort, the cron

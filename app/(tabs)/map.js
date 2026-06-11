@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import { colors } from '../../src/theme/colors';
 
-const GOOGLE_MAPS_KEY = 'AIzaSyAWkJznwQtNDv_MhFhdYvqBdfzAa3IIMew';
+const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const TP_BASE = { lat: 37.9994, lng: -122.3519, label: 'TP Dumpsters HQ' };
 const BAY_AREA_CENTER = { lat: 37.85, lng: -122.25 };
 

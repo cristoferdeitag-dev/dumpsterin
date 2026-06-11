@@ -44,7 +44,7 @@ const success = '#00C853';
 const danger = '#FF3D00';
 const info = '#2196F3';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyAWkJznwQtNDv_MhFhdYvqBdfzAa3IIMew';
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const SOURCE_OPTIONS = ['phone', 'website', 'walkin'];
 
 // ── Calendar theme ──
