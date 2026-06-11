@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, ScrollView, SafeAreaView, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
+import { supabase } from '../../src/lib/supabase';
 
 // Bay Area ZIP codes served by TP Dumpsters
 const SERVICE_ZIPS = {
@@ -77,6 +78,48 @@ export default function HomeScreen() {
   // Hide/show toggle for the revenue figure on Home (Asaí 2026-04-30: bank-app
   // pattern — useful in the field when looking at the screen with customers).
   const [hideRevenue, setHideRevenue] = useState(false);
+
+  // Money ACTUALLY collected in Stripe (the transactions ledger) — Cris
+  // 2026-06-11: the headline number must be cash in, not service delivered.
+  // MoM compares against the same day-range of the previous month.
+  const [ledger, setLedger] = useState({ collected: null, change: null, card: 0, oob: 0, refunds: 0, review: 0 });
+  useEffect(() => {
+    (async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const currentMonth = today.slice(0, 7);
+      const [y, m] = currentMonth.split('-').map(Number);
+      const prevDate = new Date(y, m - 2, 1);
+      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      const prevFrom = `${prevMonth}-01`;
+      const prevTo = `${prevMonth}-${today.slice(8, 10)}T23:59:59Z`;
+
+      const { data: cur } = await supabase
+        .from('transactions')
+        .select('amount_cents, category, metadata')
+        .gte('occurred_at', `${currentMonth}-01`);
+      const { data: prev } = await supabase
+        .from('transactions')
+        .select('amount_cents')
+        .gte('occurred_at', prevFrom)
+        .lte('occurred_at', prevTo);
+
+      const sum = (rows) => (rows || []).reduce((s, r) => s + (r.amount_cents || 0), 0);
+      const collected = sum(cur);
+      const prevCollected = sum(prev);
+      let card = 0, oob = 0, refunds = 0, review = 0;
+      for (const r of cur || []) {
+        if (r.category === 'refund' || r.category === 'chargeback') refunds += r.amount_cents || 0;
+        else if (r.category === 'provider_invoice_oob_payment') oob += r.amount_cents || 0;
+        else if ((r.amount_cents || 0) > 0) card += r.amount_cents || 0;
+        if (r.metadata?.needs_review) review += 1;
+      }
+      setLedger({
+        collected,
+        change: prevCollected > 0 ? ((collected - prevCollected) / prevCollected) * 100 : null,
+        card, oob, refunds, review,
+      });
+    })();
+  }, [bookings]);
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -225,29 +268,24 @@ export default function HomeScreen() {
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <TouchableOpacity
-              onPress={() => router.push('/revenue')}
+              onPress={() => router.push('/payments')}
               activeOpacity={0.7}
               style={{ flex: 1 }}
             >
               <Text style={{ color: '#666666', fontSize: 10, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
-                Total Revenue
+                Collected in Stripe · this month
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
                 <Text style={{ color: '#FFE066', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-                  {hideRevenue ? '••••••' : formatCurrency(stats.totalRevenue)}
+                  {hideRevenue ? '••••••' : ledger.collected === null ? '…' : formatCurrency(ledger.collected / 100)}
                 </Text>
-                {!hideRevenue && stats.revenueChange !== null && (
+                {!hideRevenue && ledger.change !== null && (
                   <Text style={{
-                    color: stats.revenueChange >= 0 ? '#85cfff' : '#ffb4ab',
+                    color: ledger.change >= 0 ? '#85cfff' : '#ffb4ab',
                     fontWeight: '700',
                     fontSize: 12,
                   }}>
-                    {stats.revenueChange >= 0 ? '+' : ''}{stats.revenueChange.toFixed(1)}%
-                  </Text>
-                )}
-                {!hideRevenue && stats.revenueChange === null && (
-                  <Text style={{ color: '#999999', fontWeight: '600', fontSize: 11 }}>
-                    no prior data
+                    {ledger.change >= 0 ? '+' : ''}{ledger.change.toFixed(1)}% vs same days last month
                   </Text>
                 )}
               </View>
@@ -272,23 +310,33 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Sales Rep Breakdown — horizontal scroll keeps it compact and works
-            for any number of reps (Asaí 2026-04-30: support adding more
-            reps later without crowding the home screen). */}
+        {/* Money channels — straight from the Stripe-fed ledger, same buckets
+            as the Payments screen. Tap any chip to drill in. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 16 }} style={{ marginBottom: 12, marginHorizontal: -16, paddingHorizontal: 16 }}>
-          {Object.entries(stats.repRevenue || {}).sort((a, b) => b[1] - a[1]).map(([rep, rev]) => {
-            const displayName = rep === 'asai' ? 'Asai' : rep === 'tiago' ? 'Tiago' : rep === 'website' ? 'Web' : rep === 'unknown' ? 'Unassigned' : rep;
-            return (
-              <View key={rep} style={{ minWidth: 110, backgroundColor: '#F7F7F7', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
-                <Text style={{ color: '#999999', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>
-                  {displayName}
-                </Text>
-                <Text style={{ color: '#FFCD11', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
-                  {hideRevenue ? '••••' : formatCurrency(rev)}
-                </Text>
-              </View>
-            );
-          })}
+          {[
+            { key: 'card', label: 'Card', value: ledger.card, color: '#FFCD11' },
+            { key: 'oob', label: 'Cash/Zelle', value: ledger.oob, color: '#16A34A' },
+            { key: 'refunds', label: 'Refunds', value: ledger.refunds, color: '#C00000' },
+          ].map((c) => (
+            <TouchableOpacity key={c.key} onPress={() => router.push('/payments')} style={{ minWidth: 110, backgroundColor: '#F7F7F7', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
+              <Text style={{ color: '#999999', fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>
+                {c.label}
+              </Text>
+              <Text style={{ color: c.color, fontSize: 16, fontWeight: '800', marginTop: 2 }}>
+                {hideRevenue ? '••••' : formatCurrency(Math.abs(c.value) / 100)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {ledger.review > 0 && (
+            <TouchableOpacity onPress={() => router.push('/payments')} style={{ minWidth: 110, backgroundColor: '#FFF3CD', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
+              <Text style={{ color: '#8a6d00', fontSize: 9, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>
+                To classify
+              </Text>
+              <Text style={{ color: '#8a6d00', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
+                {ledger.review}
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
 
         {/* Fleet Status — Fleet Readiness + Live Unit Tracking merged into a
