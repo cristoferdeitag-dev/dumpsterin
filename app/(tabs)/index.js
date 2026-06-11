@@ -86,11 +86,13 @@ export default function HomeScreen() {
     const [y, m] = currentMonth.split('-').map(Number);
     const prevDate = new Date(y, m - 2, 1); // m is 1-indexed, JS Date is 0-indexed; -2 = prev month
     const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-    const prevMonthEnd = `${prevMonth}-31`; // safe upper bound: ISO string compare works
+    // Fair month-over-month: compare June 1-11 against May 1-11, not against
+    // the FULL previous month (which showed a scary -79% every month-start).
+    const prevMonthSameDay = `${prevMonth}-${today.slice(8, 10)}`;
 
     const isCounted = b => b.status !== 'cancelled';
     const monthBookings = bookings.filter(b => isCounted(b) && (b.deliveryDate || '') >= currentMonth + '-01' && (b.deliveryDate || '') <= today);
-    const prevMonthBookings = bookings.filter(b => isCounted(b) && (b.deliveryDate || '') >= prevMonth + '-01' && (b.deliveryDate || '') <= prevMonthEnd);
+    const prevMonthBookings = bookings.filter(b => isCounted(b) && (b.deliveryDate || '') >= prevMonth + '-01' && (b.deliveryDate || '') <= prevMonthSameDay);
 
     const totalRevenue = monthBookings.reduce((sum, b) => sum + (b.total || 0), 0);
     const prevRevenue = prevMonthBookings.reduce((sum, b) => sum + (b.total || 0), 0);
