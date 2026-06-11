@@ -268,7 +268,7 @@ export default function HomeScreen() {
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <TouchableOpacity
-              onPress={() => router.push('/payments')}
+              onPress={() => router.push('/revenue')}
               activeOpacity={0.7}
               style={{ flex: 1 }}
             >
