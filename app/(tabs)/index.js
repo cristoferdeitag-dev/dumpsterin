@@ -327,16 +327,6 @@ export default function HomeScreen() {
               </Text>
             </TouchableOpacity>
           ))}
-          {ledger.review > 0 && (
-            <TouchableOpacity onPress={() => router.push('/payments')} style={{ minWidth: 110, backgroundColor: '#FFF3CD', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
-              <Text style={{ color: '#8a6d00', fontSize: 9, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>
-                To classify
-              </Text>
-              <Text style={{ color: '#8a6d00', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
-                {ledger.review}
-              </Text>
-            </TouchableOpacity>
-          )}
         </ScrollView>
 
         {/* Fleet Status — Fleet Readiness + Live Unit Tracking merged into a

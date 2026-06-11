@@ -1,3 +1,10 @@
+# SPA fallback: any path that isn't a real file routes to index.html, so a
+# refresh on /payments (or any deep link) loads the app instead of a 404.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ /index.html [L]
+
 # index.html must never be cached — it points at hashed bundles that change
 # every deploy. The hashed assets themselves can cache forever.
 <Files "index.html">

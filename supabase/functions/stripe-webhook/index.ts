@@ -176,16 +176,10 @@ async function handleInvoicePaid(
     },
   });
 
-  if (!bookingNumber) {
-    await notifyTelegram(
-      `⚠️ Stripe pago recibido sin booking_id\n\n` +
-        `Cliente: ${customerName}\n` +
-        `Monto: $${amountPaid.toFixed(2)}\n` +
-        `Invoice: ${invoiceId}\n\n` +
-        `Quedó en la pantalla Payments como "To classify" — asígnale su booking desde la app.`
-    );
-    return;
-  }
+  // Manual invoices without booking metadata are NORMAL sales (they carry the
+  // customer's name/info) — they land in the ledger like any other payment.
+  // No alert: Cris 2026-06-11 — "debería contarse como cualquier otra".
+  if (!bookingNumber) return;
 
   if (!booking) {
     await notifyTelegram(

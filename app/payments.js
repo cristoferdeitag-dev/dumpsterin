@@ -35,10 +35,10 @@ function fmt(cents) {
 
 const FILTERS = [
   { key: 'all', label: 'All' },
-  { key: 'review', label: 'To classify' },
   { key: 'card', label: 'Card' },
   { key: 'oob', label: 'Cash/Zelle' },
   { key: 'refund', label: 'Refunds' },
+  { key: 'nobooking', label: 'No booking linked' },
 ];
 
 export default function PaymentsScreen() {
@@ -91,20 +91,19 @@ export default function PaymentsScreen() {
   useEffect(() => { load(); }, [load]);
 
   const summary = useMemo(() => {
-    const s = { total: 0, card: 0, oob: 0, refunds: 0, review: 0 };
+    const s = { total: 0, card: 0, oob: 0, refunds: 0 };
     for (const r of rows) {
       const a = r.amount_cents || 0;
       if (r.category === 'refund' || r.category === 'chargeback') s.refunds += a;
       else if (r.category === 'provider_invoice_oob_payment') { s.oob += a; s.total += a; }
       else if (a > 0) { s.card += a; s.total += a; }
-      if (r.metadata?.needs_review) s.review += 1;
     }
     s.total += s.refunds; // refunds are negative
     return s;
   }, [rows]);
 
   const visible = useMemo(() => rows.filter((r) => {
-    if (filter === 'review') return r.metadata?.needs_review;
+    if (filter === 'nobooking') return !r.booking_id;
     if (filter === 'card') return r.category === 'provider_invoice_charge' && r.payment_method === 'card';
     if (filter === 'oob') return r.category === 'provider_invoice_oob_payment';
     if (filter === 'refund') return r.category === 'refund' || r.category === 'chargeback';
@@ -181,7 +180,6 @@ export default function PaymentsScreen() {
   }
 
   const badge = (r) => {
-    if (r.metadata?.needs_review) return { label: 'To classify', bg: '#FFF3CD', fg: '#8a6d00' };
     if (r.category === 'refund') return { label: 'Refund', bg: '#FDECEA', fg: '#C00' };
     if (r.category === 'provider_invoice_oob_payment')
       return { label: r.payment_method === 'zelle' ? 'Zelle' : 'Cash', bg: '#E6F4EA', fg: '#1E7E34' };
@@ -265,7 +263,7 @@ export default function PaymentsScreen() {
                 style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9999, backgroundColor: filter === f.key ? '#14213D' : '#F2F2F2' }}
               >
                 <Text style={{ fontSize: 12, fontWeight: '700', color: filter === f.key ? '#FFCD11' : '#444' }}>
-                  {f.label}{f.key === 'review' && summary.review ? ` (${summary.review})` : ''}
+                  {f.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -283,7 +281,7 @@ export default function PaymentsScreen() {
             return (
               <TouchableOpacity
                 key={r.id}
-                disabled={!r.metadata?.needs_review}
+                disabled={!!r.booking_id}
                 onPress={() => setClassifyTx(r)}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}
               >
@@ -293,7 +291,7 @@ export default function PaymentsScreen() {
                   </Text>
                   <Text style={{ color: '#888', fontSize: 12 }}>
                     {new Date(r.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    {r.booking_id ? ' · linked to booking' : ''}
+                    {r.booking_id ? ' · linked to booking' : ' · tap to link a booking'}
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 3 }}>
