@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 
 const C = {
@@ -20,9 +21,12 @@ const C = {
 };
 
 export default function AuthScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleMagicLink = async () => {
@@ -71,6 +75,33 @@ export default function AuthScreen() {
     }
   };
 
+  // The shared Supabase project emails a sign-in CODE (template changed for
+  // BookingDumpsters 2026-06-09), so this step collects and verifies it.
+  const handleVerifyCode = async () => {
+    const cleanCode = code.replace(/\D/g, '');
+    if (cleanCode.length < 6) {
+      Alert.alert('Code required', 'Enter the code from the email we sent you.');
+      return;
+    }
+    setVerifying(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: email.trim().toLowerCase(),
+        token: cleanCode,
+        type: 'email',
+      });
+      if (error) {
+        Alert.alert('Wrong or expired code', error.message || 'Check the code and try again, or request a new one.');
+        return;
+      }
+      router.replace('/');
+    } catch (e) {
+      Alert.alert('Unexpected error', e.message || 'Try again');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   if (sent) {
     return (
       <SafeAreaView style={styles.container}>
@@ -79,10 +110,47 @@ export default function AuthScreen() {
             <Ionicons name="mail-open" size={56} color={C.primaryDark} />
             <Text style={styles.brand}>Check your email</Text>
             <Text style={styles.tagline}>
-              We sent a sign-in link to {email}. Click the link to enter Dumpsterin.
+              We sent a sign-in code to {email}. Type it below — if the email has a link, that works too.
             </Text>
           </View>
-          <TouchableOpacity onPress={() => { setSent(false); setEmail(''); }} style={styles.linkRow}>
+
+          <View style={styles.card}>
+            <View style={styles.inputWrap}>
+              <Ionicons name="key-outline" size={20} color={C.textMuted} style={{ marginRight: 8 }} />
+              <TextInput
+                style={[styles.input, { letterSpacing: 4, fontSize: 18, fontWeight: '700' }]}
+                placeholder="12345678"
+                placeholderTextColor={C.textLight}
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+                autoFocus
+                maxLength={10}
+                editable={!verifying}
+                onSubmitEditing={handleVerifyCode}
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.primaryBtn, (verifying || code.length < 6) && styles.primaryBtnDisabled]}
+              onPress={handleVerifyCode}
+              disabled={verifying || code.length < 6}
+              activeOpacity={0.85}
+            >
+              {verifying ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="log-in-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.primaryBtnText}>Verify & sign in</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={handleMagicLink} style={styles.linkRow} disabled={sending}>
+            <Text style={styles.linkText}>{sending ? 'Sending…' : 'Resend code'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setSent(false); setEmail(''); setCode(''); }} style={styles.linkRow}>
             <Text style={styles.linkText}>Use a different email</Text>
           </TouchableOpacity>
         </View>
@@ -102,7 +170,7 @@ export default function AuthScreen() {
         <View style={styles.card}>
           <Text style={styles.heading}>Sign in</Text>
           <Text style={styles.subheading}>
-            Enter your email and we'll send you a one-tap sign-in link.
+            Enter your email and we'll send you a sign-in code.
           </Text>
 
           <View style={styles.inputWrap}>
@@ -132,7 +200,7 @@ export default function AuthScreen() {
             ) : (
               <>
                 <Ionicons name="send" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryBtnText}>Send magic link</Text>
+                <Text style={styles.primaryBtnText}>Send code</Text>
               </>
             )}
           </TouchableOpacity>
