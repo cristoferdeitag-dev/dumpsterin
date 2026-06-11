@@ -16,6 +16,31 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TG_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "";
 const TG_ALERT_CHAT = Deno.env.get("TELEGRAM_ALERT_CHAT_ID") || "8665156164"; // Cristofer
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET_DUMPSTERIN")!;
+// This webhook listens on TP's own Stripe account; every ledger row belongs
+// to TP. Future providers connect their own accounts via BD/Connect and get
+// their own webhook wiring.
+const TP_COMPANY_ID = Deno.env.get("TP_COMPANY_ID") || "a0000000-0000-0000-0000-000000000001";
+
+// Ledger writer — every money event lands in `transactions`, matched to a
+// booking or not. Idempotent on stripe_event_id, so Stripe retries are safe.
+async function recordTransaction(row: Record<string, unknown>): Promise<void> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/transactions?on_conflict=stripe_event_id`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=ignore-duplicates,return=minimal",
+      },
+      body: JSON.stringify([row]),
+    }
+  );
+  if (!res.ok) {
+    console.error("transactions insert failed:", res.status, await res.text());
+  }
+}
 
 // Tolerate up to 5 minutes of clock drift on signature timestamp.
 const SIG_TOLERANCE_SECONDS = 300;
@@ -110,10 +135,17 @@ async function updateBookingPayment(
   return res.ok;
 }
 
-async function handleInvoicePaid(invoice: Record<string, unknown>): Promise<void> {
+async function handleInvoicePaid(
+  invoice: Record<string, unknown>,
+  eventId: string
+): Promise<void> {
   const md = (invoice.metadata as Record<string, string>) || {};
   const bookingNumber = md.booking_id || "";
-  const amountPaid = ((invoice.amount_paid as number) || 0) / 100;
+  const paidOob = invoice.paid_out_of_band === true;
+  // Out-of-band payments keep amount_paid at 0 — fall back to amount_due.
+  const amountCents =
+    ((invoice.amount_paid as number) || 0) || ((invoice.amount_due as number) || 0);
+  const amountPaid = amountCents / 100;
   const paidAtTs = (invoice.status_transitions as { paid_at?: number } | undefined)?.paid_at;
   const paidAt = paidAtTs
     ? new Date(paidAtTs * 1000).toISOString()
@@ -121,19 +153,40 @@ async function handleInvoicePaid(invoice: Record<string, unknown>): Promise<void
   const invoiceId = invoice.id as string;
   const customerName = (invoice.customer_name as string) || "(sin nombre)";
 
+  const booking = bookingNumber ? await findBookingByNumber(bookingNumber) : null;
+
+  const oobMethod = md.oob_method === "cash" || md.oob_method === "zelle" ? md.oob_method : "other";
+  await recordTransaction({
+    occurred_at: paidAt,
+    category: paidOob ? "provider_invoice_oob_payment" : "provider_invoice_charge",
+    amount_cents: amountCents,
+    currency: (invoice.currency as string) || "usd",
+    booking_id: booking?.id || null,
+    provider_id: TP_COMPANY_ID,
+    payment_method: paidOob ? oobMethod : "card",
+    stripe_object_id: invoiceId,
+    stripe_event_id: eventId,
+    description: `${customerName} · ${(invoice.number as string) || invoiceId}`,
+    metadata: {
+      needs_review: !booking,
+      customer_name: customerName,
+      invoice_number: (invoice.number as string) || null,
+      booking_number: bookingNumber || null,
+      source: "stripe-webhook",
+    },
+  });
+
   if (!bookingNumber) {
     await notifyTelegram(
       `⚠️ Stripe pago recibido sin booking_id\n\n` +
         `Cliente: ${customerName}\n` +
         `Monto: $${amountPaid.toFixed(2)}\n` +
         `Invoice: ${invoiceId}\n\n` +
-        `Esta invoice se creó manualmente en Stripe sin metadata. ` +
-        `Asígnala a un booking existente o crea uno nuevo en el app.`
+        `Quedó en la pantalla Payments como "To classify" — asígnale su booking desde la app.`
     );
     return;
   }
 
-  const booking = await findBookingByNumber(bookingNumber);
   if (!booking) {
     await notifyTelegram(
       `🚨 Stripe pago con booking_id que no existe en Dumpsterin\n\n` +
@@ -160,21 +213,50 @@ async function handleInvoicePaid(invoice: Record<string, unknown>): Promise<void
   console.log(`[webhook] booking ${bookingNumber} marked paid $${amountPaid}`);
 }
 
-async function handleChargeRefunded(charge: Record<string, unknown>): Promise<void> {
+async function handleChargeRefunded(
+  charge: Record<string, unknown>,
+  eventId: string
+): Promise<void> {
   const invoiceId = charge.invoice as string | null;
-  if (!invoiceId) return;
+  const refundedCents = (charge.amount_refunded as number) || 0;
+  const billing = charge.billing_details as { name?: string } | undefined;
+  const customerName = billing?.name || "(sin nombre)";
 
-  const params = new URLSearchParams({
-    select: "id,booking_number",
-    stripe_invoice_id: `eq.${invoiceId}`,
-    limit: "1",
+  let booking: { id: string; booking_number: string } | null = null;
+  if (invoiceId) {
+    const params = new URLSearchParams({
+      select: "id,booking_number",
+      stripe_invoice_id: `eq.${invoiceId}`,
+      limit: "1",
+    });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?${params}`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    });
+    if (res.ok) {
+      const rows = (await res.json()) as Array<{ id: string; booking_number: string }>;
+      booking = rows[0] || null;
+    }
+  }
+
+  await recordTransaction({
+    occurred_at: new Date(((charge.created as number) || Date.now() / 1000) * 1000).toISOString(),
+    category: "refund",
+    amount_cents: -refundedCents,
+    currency: (charge.currency as string) || "usd",
+    booking_id: booking?.id || null,
+    provider_id: TP_COMPANY_ID,
+    payment_method: "card",
+    stripe_object_id: (charge.id as string) || null,
+    stripe_event_id: eventId,
+    description: `Refund · ${customerName}`,
+    metadata: {
+      needs_review: !booking,
+      customer_name: customerName,
+      invoice: invoiceId,
+      source: "stripe-webhook",
+    },
   });
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?${params}`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-  });
-  if (!res.ok) return;
-  const rows = (await res.json()) as Array<{ id: string; booking_number: string }>;
-  const booking = rows[0];
+
   if (!booking) return;
 
   await updateBookingPayment(booking.id, { payment_status: "refunded" });
@@ -195,7 +277,7 @@ Deno.serve(async (req: Request) => {
     return new Response("Invalid signature", { status: 401 });
   }
 
-  let event: { type: string; data: { object: Record<string, unknown> } };
+  let event: { id: string; type: string; data: { object: Record<string, unknown> } };
   try {
     event = JSON.parse(rawBody);
   } catch {
@@ -204,10 +286,12 @@ Deno.serve(async (req: Request) => {
 
   console.log(`[webhook] event=${event.type}`);
   try {
-    if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
-      await handleInvoicePaid(event.data.object);
+    if (event.type === "invoice.paid") {
+      // Only invoice.paid — listening to invoice.payment_succeeded too would
+      // double-write the ledger (both fire for the same payment).
+      await handleInvoicePaid(event.data.object, event.id);
     } else if (event.type === "charge.refunded") {
-      await handleChargeRefunded(event.data.object);
+      await handleChargeRefunded(event.data.object, event.id);
     }
     // Acknowledge other events silently — Stripe retries non-2xx responses.
   } catch (err) {

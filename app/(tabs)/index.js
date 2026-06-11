@@ -188,6 +188,24 @@ export default function HomeScreen() {
             <Ionicons name="document-text-outline" size={16} color="#1A1A1A" />
             <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>Notes</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/payments')}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 9999,
+              backgroundColor: '#F7F7F7',
+              borderWidth: 1,
+              borderColor: '#E8E8E8',
+              marginLeft: 6,
+            }}
+          >
+            <Ionicons name="card-outline" size={16} color="#1A1A1A" />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>Payments</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Service Area Check moved to the Map tab — Asaí 2026-04-30 */}
