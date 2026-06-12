@@ -34,13 +34,18 @@ export function AuthProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!isMounted) return;
       setSession(newSession);
-      setLoading(false);
       if (newSession) {
-        setTimeout(() => {
-          if (isMounted) loadProfile(newSession.user.id);
+        // Keep loading=true until the profile lands — releasing it earlier
+        // makes the route gate think there's no company and bounces the user
+        // to /onboarding for a split second (or for good).
+        setTimeout(async () => {
+          if (!isMounted) return;
+          await loadProfile(newSession.user.id);
+          if (isMounted) setLoading(false);
         }, 0);
       } else {
         setProfile(null);
+        setLoading(false);
       }
     });
 

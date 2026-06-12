@@ -23,8 +23,9 @@ function RouteGuard({ children }) {
     } else if (isAuthenticated && !hasCompany && !inOnboarding && !inAuth) {
       // Logged in but no company yet → send to onboarding
       router.replace('/onboarding');
-    } else if (isAuthenticated && hasCompany && inAuth) {
-      // Already logged in, trying to access auth page → redirect to home
+    } else if (isAuthenticated && hasCompany && (inAuth || inOnboarding)) {
+      // Already logged in with a company — auth and onboarding are not for
+      // you. (Onboarding is only for brand-new accounts without a company.)
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, hasCompany, loading, segments]);
