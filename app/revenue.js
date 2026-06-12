@@ -1,906 +1,257 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
-  TextInput,
-  StyleSheet,
+  ScrollView,
   SafeAreaView,
-  Modal,
+  ActivityIndicator,
 } from 'react-native';
-import { Calendar } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useApp } from '../src/context/AppContext';
+import { supabase, getCompanyId } from '../src/lib/supabase';
 
-// Design system — "Industrial Sophistication"
-const C = {
-  surface: '#FFFFFF',
-  surfaceLow: '#F7F7F7',
-  surfaceHigh: '#EEEEEE',
-  surfaceHighest: '#E8E8E8',
-  surfaceLowest: '#F0F0F0',
-  primary: '#FFE066',
-  primaryContainer: '#FFCD11',
-  onPrimary: '#4d2600',
-  onSurface: '#1A1A1A',
-  onSurfaceVariant: '#666666',
-  tertiary: '#85cfff',
-  error: '#ffb4ab',
-};
+// Sales report, provider-first (Cris 2026-06-11): one simple page a provider
+// understands at a glance — total collected, where it came from, what sold,
+// and who the star customers are. The old "expected revenue" tab is gone:
+// a paid booking is money in the bank, not a forecast.
 
-function fmt(n) {
-  return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+function fmt(cents) {
+  return `$${(Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
 
-function pct(part, total) {
-  if (!total) return '0%';
-  return ((part / total) * 100).toFixed(1) + '%';
-}
-
-function getWeekOfMonth(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDate();
-  return Math.ceil(day / 7);
-}
-
-const DATE_FILTERS = [
-  { id: 'this_week', label: 'This Week' },
-  { id: 'this_month', label: 'This Month' },
-  { id: 'last_month', label: 'Last Month' },
-  { id: 'all', label: 'Lifetime' },
-  { id: 'custom', label: 'Custom' },
-];
-
-function getDateRange(filterId) {
-  const now = new Date();
-  switch (filterId) {
-    case 'this_week': {
-      const day = now.getDay();
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
-    }
-    case 'this_month':
-      return { start: now.toISOString().slice(0, 7) + '-01', end: now.toISOString().slice(0, 10) };
-    case 'last_month': {
-      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-      return { start: lm.toISOString().slice(0, 10), end: lmEnd.toISOString().slice(0, 10) };
-    }
-    case 'all':
-      return { start: '2000-01-01', end: '2099-12-31' };
-    default:
-      return { start: '2000-01-01', end: '2099-12-31' };
-  }
-}
-
-import { fetchProviderTransactions, summarizeFinancial } from '../src/lib/transactionsApi';
-import { useEffect } from 'react';
-
-export default function RevenueScreen() {
-  const router = useRouter();
-  const { state } = useApp();
-  const bookings = state.bookings || [];
-
-  const [dateFilter, setDateFilter] = useState('this_month');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
-  const [showStartCal, setShowStartCal] = useState(false);
-  const [showEndCal, setShowEndCal] = useState(false);
-  // 'service' = filter/sum by deliveryDate (when the dumpster lands at the
-  // job) — answers "how much did we deliver this month?". 'cash' = filter
-  // by paidAt + sum paidAmount (when the money landed) — answers "how much
-  // did we collect this month?", matches Stripe deposits.
-  const [basis, setBasis] = useState('service');
-
-  // 'operational' (default) = read from bookings table (legacy view).
-  // 'financial' = read from transactions ledger (real money in/out + fees).
-  const [mode, setMode] = useState('operational');
-  const [financialSummary, setFinancialSummary] = useState(null);
-  const [financialLoading, setFinancialLoading] = useState(false);
-
-  const now = new Date();
-  const currentYM = now.toISOString().slice(0, 7);
-
-  const CLOSED_STATUSES = ['completed', 'delivered', 'picked_up', 'pickup_ready', 'dumping', 'ready_for_pickup'];
-  const EXPECTED_STATUSES = ['scheduled', 'in_transit', 'on_site', 'quote_sent'];
-
-  // Which date field & money field we filter/sum by depends on the basis.
-  // Cash basis uses paidAt + paidAmount; Service basis uses deliveryDate + total.
-  const dateField = basis === 'cash' ? 'paidAt' : 'deliveryDate';
-  const amountField = basis === 'cash' ? 'paidAmount' : 'total';
-
-  const stats = useMemo(() => {
-    const range = dateFilter === 'custom'
-      ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
-      : getDateRange(dateFilter);
-
-    const inRange = bookings.filter((b) => {
-      if (b.status === 'cancelled') return false;
-      const d = b[dateField] || '';
-      // Cash basis excludes anything we haven't been paid for yet.
-      if (basis === 'cash' && !d) return false;
-      return d >= range.start && d <= range.end;
-    });
-
-    // For cash basis, "closed" = anything we got paid for (paidAt set).
-    // For service basis we keep the existing status-bucket logic.
-    const closed = basis === 'cash'
-      ? inRange.filter((b) => !!b.paidAt)
-      : inRange.filter((b) => CLOSED_STATUSES.includes(b.status));
-    const expected = basis === 'cash'
-      ? [] // cash basis can't have "expected" by definition
-      : inRange.filter((b) => EXPECTED_STATUSES.includes(b.status));
-
-    const sumAmt = (arr) => arr.reduce((s, b) => s + (b[amountField] || 0), 0);
-    const closedRevenue = sumAmt(closed);
-    const expectedRevenue = sumAmt(expected);
-    const totalRevenue = closedRevenue + expectedRevenue;
-
-    // Extras (add-ons) revenue across the same period — base summed from
-    // extra_days_fee + overweight_fee + special_items_fee on each booking.
-    const extrasRevenue = inRange.reduce((s, b) => s + (b.extrasTotal || 0), 0);
-    const extrasBreakdown = inRange.reduce((acc, b) => {
-      (b.extras || []).forEach((ex) => {
-        acc[ex.label] = (acc[ex.label] || 0) + (ex.amount || 0);
-      });
-      return acc;
-    }, {});
-
-    const thisMonth = inRange.filter((b) => (b[dateField] || '').startsWith(currentYM));
-    const monthRevenue = sumAmt(thisMonth);
-    const avgValue = inRange.length ? totalRevenue / inRange.length : 0;
-
-    // Revenue by sales rep — split closed vs expected (generatedBy field, fallback to source)
-    const repMap = {};
-    const addToRep = (b, bucket) => {
-      const rep = b.generatedBy || b.source || 'unknown';
-      if (!repMap[rep]) repMap[rep] = { name: rep, closed: 0, expected: 0, count: 0 };
-      repMap[rep][bucket] += b[amountField] || 0;
-      repMap[rep].count += 1;
-    };
-    closed.forEach((b) => addToRep(b, 'closed'));
-    expected.forEach((b) => addToRep(b, 'expected'));
-    const byRep = Object.values(repMap)
-      .map((r) => ({ ...r, revenue: r.closed + r.expected }))
-      .sort((a, b) => b.revenue - a.revenue);
-
-    // Revenue by service type
-    const svcMap = {};
-    inRange.forEach((b) => {
-      const svc = b.serviceType || 'Other';
-      if (!svcMap[svc]) svcMap[svc] = { name: svc, revenue: 0, count: 0 };
-      svcMap[svc].revenue += b[amountField] || 0;
-      svcMap[svc].count += 1;
-    });
-    const byService = Object.values(svcMap).sort((a, b) => b.revenue - a.revenue);
-
-    // Revenue by dumpster size
-    const sizeMap = {};
-    inRange.forEach((b) => {
-      const sz = b.dumpsterSize || 'Unknown';
-      if (!sizeMap[sz]) sizeMap[sz] = { name: sz, revenue: 0, count: 0 };
-      sizeMap[sz].revenue += b[amountField] || 0;
-      sizeMap[sz].count += 1;
-    });
-    const bySize = Object.values(sizeMap).sort((a, b) => b.revenue - a.revenue);
-
-    // Top customers
-    const custMap = {};
-    inRange.forEach((b) => {
-      const name = b.customerName || 'Unknown';
-      if (!custMap[name]) custMap[name] = { name, revenue: 0, count: 0 };
-      custMap[name].revenue += b[amountField] || 0;
-      custMap[name].count += 1;
-    });
-    const topCustomers = Object.values(custMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-
-    // Monthly trend — revenue per week of current month
-    const weekMap = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    thisMonth.forEach((b) => {
-      const w = getWeekOfMonth(b[dateField]);
-      weekMap[w] = (weekMap[w] || 0) + (b[amountField] || 0);
-    });
-    // Only include weeks that exist (up to 5)
-    const weeklyTrend = [];
-    for (let i = 1; i <= 5; i++) {
-      if (weekMap[i] !== undefined) {
-        weeklyTrend.push({ week: `W${i}`, revenue: weekMap[i] });
-      }
-    }
-
-    return {
-      totalRevenue,
-      closedRevenue,
-      expectedRevenue,
-      closedCount: closed.length,
-      expectedCount: expected.length,
-      monthRevenue,
-      avgValue,
-      byRep,
-      byService,
-      bySize,
-      topCustomers,
-      weeklyTrend,
-      extrasRevenue,
-      extrasBreakdown,
-    };
-  }, [bookings, currentYM, dateFilter, customStart, customEnd, basis, dateField, amountField]);
-
-  const maxRepRevenue = stats.byRep.length ? stats.byRep[0].revenue : 1;
-  const maxSvcRevenue = stats.byService.length ? stats.byService[0].revenue : 1;
-  const maxSizeRevenue = stats.bySize.length ? stats.bySize[0].revenue : 1;
-  const maxWeekRevenue = Math.max(...stats.weeklyTrend.map((w) => w.revenue), 1);
-
-  const repLabel = (name) => {
-    const labels = {
-      tiago: 'Tiago',
-      asai: 'Asai',
-      website: 'Website',
-      phone: 'Phone',
-    };
-    return labels[name] || name.charAt(0).toUpperCase() + name.slice(1);
-  };
-
-  // Fetch ledger rows when the user switches to the financial view. The
-  // bookings-based view above is unchanged — this is a pure addition.
-  useEffect(() => {
-    if (mode !== 'financial') return;
-    const range = dateFilter === 'custom'
-      ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
-      : getDateRange(dateFilter);
-    setFinancialLoading(true);
-    const fromISO = new Date(`${range.start}T00:00:00Z`).toISOString();
-    const toISO = new Date(`${range.end}T23:59:59Z`).toISOString();
-    fetchProviderTransactions(fromISO, toISO)
-      .then((rows) => setFinancialSummary(summarizeFinancial(rows)))
-      .finally(() => setFinancialLoading(false));
-  }, [mode, dateFilter, customStart, customEnd]);
-
-  // "Sold" (operational) = total of bookings in range — used to show drift
-  // between sold and collected on the financial view.
-  const operationalSoldCents = useMemo(() => {
-    const range = dateFilter === 'custom'
-      ? { start: customStart || '2000-01-01', end: customEnd || '2099-12-31' }
-      : getDateRange(dateFilter);
-    const inRange = bookings.filter((b) => {
-      if (b.status === 'cancelled') return false;
-      const d = b.deliveryDate || '';
-      return d >= range.start && d <= range.end;
-    });
-    return Math.round(inRange.reduce((sum, b) => sum + (b.total || 0), 0) * 100);
-  }, [bookings, dateFilter, customStart, customEnd]);
-
+function Section({ title, children }) {
   return (
-    <SafeAreaView style={s.safe}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={C.onSurface} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Revenue</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
-        {/* Mode toggle — Operational (bookings-based) vs Financial (ledger-based).
-            Operational answers "what did I sell?"; Financial answers "what did
-            I actually collect after refunds + Stripe fees?". The Operational
-            mode keeps the legacy view intact. */}
-        <View style={{ flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 9999, padding: 4, marginBottom: 14, alignSelf: 'flex-start' }}>
-          {[
-            { id: 'operational', label: 'Operational' },
-            { id: 'financial', label: 'Financial' },
-          ].map((opt) => (
-            <TouchableOpacity
-              key={opt.id}
-              onPress={() => setMode(opt.id)}
-              style={{
-                paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999,
-                backgroundColor: mode === opt.id ? '#FFCD11' : 'transparent',
-              }}
-            >
-              <Text style={{
-                color: mode === opt.id ? '#1A1A1A' : '#FFF',
-                fontSize: 13, fontWeight: mode === opt.id ? '800' : '500',
-              }}>{opt.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Basis toggle — Service (when delivered) vs Cash (when paid).
-            Service is the default; Cash matches Stripe deposits.
-            Hidden in Financial mode because that view sums real transactions. */}
-        {mode === 'operational' && (
-          <>
-            <View style={{ flexDirection: 'row', backgroundColor: '#F0F0F0', borderRadius: 9999, padding: 4, marginBottom: 12, alignSelf: 'flex-start' }}>
-              {[
-                { id: 'service', label: 'By Delivery', hint: 'When the dumpster ships' },
-                { id: 'cash', label: 'By Payment', hint: 'When the cash landed' },
-              ].map((opt) => (
-                <TouchableOpacity
-                  key={opt.id}
-                  onPress={() => setBasis(opt.id)}
-                  style={{
-                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
-                    backgroundColor: basis === opt.id ? '#FFFFFF' : 'transparent',
-                  }}
-                >
-                  <Text style={{
-                    color: basis === opt.id ? '#FFCD11' : '#666',
-                    fontSize: 13, fontWeight: basis === opt.id ? '700' : '500',
-                  }}>{opt.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={{ fontSize: 11, color: '#888', marginBottom: 14, marginLeft: 4 }}>
-              {basis === 'cash'
-                ? 'Showing revenue by when payment hit (matches Stripe).'
-                : 'Showing revenue by when service was delivered (operational view).'}
-            </Text>
-          </>
-        )}
-
-        {/* Date Filter */}
-        <View style={{ marginBottom: 16 }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
-              {DATE_FILTERS.map(f => (
-                <TouchableOpacity
-                  key={f.id}
-                  onPress={() => setDateFilter(f.id)}
-                  style={{
-                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999,
-                    backgroundColor: dateFilter === f.id ? '#FFCD11' : '#F0F0F0',
-                  }}
-                >
-                  <Text style={{
-                    color: dateFilter === f.id ? '#FFFFFF' : '#666666',
-                    fontSize: 13, fontWeight: dateFilter === f.id ? '700' : '500',
-                  }}>{f.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-          {dateFilter === 'custom' && (
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-              <TouchableOpacity
-                onPress={() => setShowStartCal(true)}
-                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-              >
-                <Ionicons name="calendar-outline" size={16} color={customStart ? '#FFCD11' : '#AAA'} />
-                <Text style={{ fontSize: 14, color: customStart ? '#333' : '#AAA' }}>
-                  {customStart || 'Start date'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setShowEndCal(true)}
-                style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-              >
-                <Ionicons name="calendar-outline" size={16} color={customEnd ? '#FFCD11' : '#AAA'} />
-                <Text style={{ fontSize: 14, color: customEnd ? '#333' : '#AAA' }}>
-                  {customEnd || 'End date'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Start Date Calendar Modal */}
-          <Modal visible={showStartCal} transparent animationType="fade">
-            <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }} activeOpacity={1} onPress={() => setShowStartCal(false)}>
-              <View style={{ backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', width: '100%', maxWidth: 400 }}>
-                <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#E8E8E8', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A1A1A' }}>Start Date</Text>
-                  <TouchableOpacity onPress={() => setShowStartCal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
-                </View>
-                <Calendar
-                  theme={{ selectedDayBackgroundColor: '#FFCD11', todayTextColor: '#FFCD11', arrowColor: '#FFCD11' }}
-                  onDayPress={(day) => { setCustomStart(day.dateString); setShowStartCal(false); }}
-                  markedDates={{ [customStart]: { selected: true, selectedColor: '#FFCD11' } }}
-                />
-              </View>
-            </TouchableOpacity>
-          </Modal>
-
-          {/* End Date Calendar Modal */}
-          <Modal visible={showEndCal} transparent animationType="fade">
-            <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }} activeOpacity={1} onPress={() => setShowEndCal(false)}>
-              <View style={{ backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', width: '100%', maxWidth: 400 }}>
-                <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#E8E8E8', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A1A1A' }}>End Date</Text>
-                  <TouchableOpacity onPress={() => setShowEndCal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
-                </View>
-                <Calendar
-                  theme={{ selectedDayBackgroundColor: '#FFCD11', todayTextColor: '#FFCD11', arrowColor: '#FFCD11' }}
-                  onDayPress={(day) => { setCustomEnd(day.dateString); setShowEndCal(false); }}
-                  markedDates={{ [customEnd]: { selected: true, selectedColor: '#FFCD11' } }}
-                  minDate={customStart || undefined}
-                />
-              </View>
-            </TouchableOpacity>
-          </Modal>
-        </View>
-
-        {/* ---------- Financial mode: cards from the transactions ledger ---------- */}
-        {mode === 'financial' && (
-          <View>
-            {financialLoading && (
-              <Text style={{ color: '#999', padding: 12 }}>Loading ledger…</Text>
-            )}
-            {!financialLoading && financialSummary && (
-              <>
-                {(() => {
-                  const fs = financialSummary;
-                  const sold = operationalSoldCents;
-                  const collected = fs.gross_inflow_cents;
-                  const diff = sold - collected;
-                  return (
-                    <>
-                      <View style={s.cardsRow}>
-                        <View style={[s.card, { flex: 1, borderLeftWidth: 3, borderLeftColor: '#00C853' }]}>
-                          <Text style={s.cardLabel}>💰 Net to your bank</Text>
-                          <Text style={s.cardValueBig}>{fmt(fs.net_to_bank_cents / 100)}</Text>
-                          <Text style={s.cardHint}>After refunds + Stripe fees</Text>
-                        </View>
-                      </View>
-                      <View style={s.cardsRow}>
-                        <View style={[s.card, s.cardHalf]}>
-                          <Text style={s.cardLabel}>Sold (operational)</Text>
-                          <Text style={s.cardValue}>{fmt(sold / 100)}</Text>
-                        </View>
-                        <View style={[s.card, s.cardHalf]}>
-                          <Text style={s.cardLabel}>Collected</Text>
-                          <Text style={s.cardValue}>{fmt(collected / 100)}</Text>
-                        </View>
-                      </View>
-                      {diff > 0 && (
-                        <View style={[s.card, { backgroundColor: '#FFFBEA', borderLeftWidth: 3, borderLeftColor: '#FFC107', marginBottom: 12 }]}>
-                          <Text style={s.cardLabel}>⚠️ Difference vs sold</Text>
-                          <Text style={[s.cardValue, { color: '#C77700' }]}>{fmt(diff / 100)}</Text>
-                          <Text style={s.cardHint}>Likely quotes_sent that have not been paid yet.</Text>
-                        </View>
-                      )}
-                      <View style={s.section}>
-                        <Text style={s.sectionTitle}>Where the money came from</Text>
-                        <FinRow label="Marketplace (BD) payout" cents={fs.marketplace_payout_cents} count={fs.count_marketplace} />
-                        <FinRow label="My own quotes (Stripe card)" cents={fs.provider_invoice_card_cents} count={fs.count_provider_invoice_card} />
-                        <FinRow label="Cash / Zelle / check (out-of-band)" cents={fs.provider_invoice_oob_cents} count={fs.count_provider_invoice_oob} />
-                      </View>
-                      <View style={s.section}>
-                        <Text style={s.sectionTitle}>Costs / outflows</Text>
-                        <FinRow label="Refunds issued" cents={-fs.refund_cents} count={fs.count_refunds} negative />
-                        <FinRow label="Chargebacks" cents={-fs.chargeback_cents} negative />
-                        <FinRow label="Stripe processing fees" cents={-fs.stripe_fee_cents} negative />
-                      </View>
-                    </>
-                  );
-                })()}
-              </>
-            )}
-            <View style={{ height: 40 }} />
-          </View>
-        )}
-
-        {/* ---------- Operational mode: legacy bookings-based stats ---------- */}
-        {mode === 'operational' && (
-          <>
-        <View style={s.cardsRow}>
-          <View style={[s.card, { flex: 1 }]}>
-            <Text style={s.cardLabel}>Total Projected</Text>
-            <Text style={s.cardValueBig}>{fmt(stats.totalRevenue)}</Text>
-            <Text style={s.cardHint}>Closed + Expected</Text>
-          </View>
-        </View>
-        <View style={s.cardsRow}>
-          <View style={[s.card, s.cardHalf, { borderLeftWidth: 3, borderLeftColor: '#00b5fc' }]}>
-            <Text style={s.cardLabel}>✅ Closed</Text>
-            <Text style={s.cardValueBig}>{fmt(stats.closedRevenue)}</Text>
-            <Text style={s.cardHint}>{stats.closedCount} bookings</Text>
-          </View>
-          <View style={[s.card, s.cardHalf, { borderLeftWidth: 3, borderLeftColor: '#FFCD11' }]}>
-            <Text style={s.cardLabel}>📅 Expected</Text>
-            <Text style={s.cardValueBig}>{fmt(stats.expectedRevenue)}</Text>
-            <Text style={s.cardHint}>{stats.expectedCount} scheduled</Text>
-          </View>
-        </View>
-        <View style={s.cardsRow}>
-          <View style={[s.card, s.cardHalf]}>
-            <Text style={s.cardLabel}>This Month</Text>
-            <Text style={s.cardValue}>{fmt(stats.monthRevenue)}</Text>
-          </View>
-          <View style={[s.card, s.cardHalf]}>
-            <Text style={s.cardLabel}>Avg Booking Value</Text>
-            <Text style={s.cardValue}>{fmt(stats.avgValue)}</Text>
-          </View>
-        </View>
-
-        {/* Extras Revenue */}
-        {stats.extrasRevenue > 0 && (
-          <View style={[s.section, { paddingTop: 4 }]}>
-            <Text style={s.sectionTitle}>Extras Revenue</Text>
-            <View style={[s.card, { borderLeftWidth: 3, borderLeftColor: '#FFCD11' }]}>
-              <Text style={s.cardLabel}>Add-ons total</Text>
-              <Text style={s.cardValueBig}>{fmt(stats.extrasRevenue)}</Text>
-              <Text style={s.cardHint}>
-                {pct(stats.extrasRevenue, stats.totalRevenue)} of total revenue
-              </Text>
-              <View style={{ marginTop: 12, gap: 6 }}>
-                {Object.entries(stats.extrasBreakdown).map(([label, amount]) => (
-                  <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: '#666', fontSize: 13 }}>{label}</Text>
-                    <Text style={{ color: '#1A1A1A', fontWeight: '700', fontSize: 13 }}>{fmt(amount)}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Revenue by Sales Rep */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Revenue by Sales Rep</Text>
-          {stats.byRep.map((rep) => (
-            <View key={rep.name} style={s.repRow}>
-              <View style={s.repHeader}>
-                <Text style={s.repName}>{repLabel(rep.name)}</Text>
-                <Text style={s.repRevenue}>{fmt(rep.revenue)}</Text>
-              </View>
-              <View style={s.repMeta}>
-                <Text style={s.repMetaText}>{rep.count} bookings</Text>
-                <Text style={s.repMetaText}>{pct(rep.revenue, stats.totalRevenue)}</Text>
-              </View>
-              {/* Stacked bar: closed (blue) + expected (orange) */}
-              <View style={s.barBg}>
-                <View
-                  style={[
-                    s.barFill,
-                    { width: `${(rep.closed / maxRepRevenue) * 100}%`, backgroundColor: '#00b5fc' },
-                  ]}
-                />
-                <View
-                  style={[
-                    s.barFill,
-                    {
-                      position: 'absolute',
-                      left: `${(rep.closed / maxRepRevenue) * 100}%`,
-                      width: `${(rep.expected / maxRepRevenue) * 100}%`,
-                      backgroundColor: '#FFCD11',
-                      opacity: 0.7,
-                    },
-                  ]}
-                />
-              </View>
-              <View style={[s.repMeta, { marginTop: 4 }]}>
-                <Text style={[s.repMetaText, { color: '#00b5fc' }]}>✅ {fmt(rep.closed)}</Text>
-                <Text style={[s.repMetaText, { color: '#FFCD11' }]}>📅 {fmt(rep.expected)}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Revenue by Service Type */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Revenue by Service Type</Text>
-          {stats.byService.map((svc) => (
-            <View key={svc.name} style={s.repRow}>
-              <View style={s.repHeader}>
-                <Text style={s.repName}>{svc.name}</Text>
-                <Text style={s.repRevenue}>{fmt(svc.revenue)}</Text>
-              </View>
-              <Text style={s.repMetaText}>{svc.count} bookings</Text>
-              <View style={s.barBg}>
-                <View
-                  style={[
-                    s.barFill,
-                    { width: `${(svc.revenue / maxSvcRevenue) * 100}%`, backgroundColor: C.tertiary },
-                  ]}
-                />
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Revenue by Dumpster Size */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Revenue by Dumpster Size</Text>
-          {stats.bySize.map((sz) => (
-            <View key={sz.name} style={s.repRow}>
-              <View style={s.repHeader}>
-                <Text style={s.repName}>{sz.name}</Text>
-                <Text style={s.repRevenue}>{fmt(sz.revenue)}</Text>
-              </View>
-              <Text style={s.repMetaText}>{sz.count} bookings</Text>
-              <View style={s.barBg}>
-                <View
-                  style={[
-                    s.barFill,
-                    { width: `${(sz.revenue / maxSizeRevenue) * 100}%`, backgroundColor: C.primary },
-                  ]}
-                />
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Top Customers */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Top 5 Customers</Text>
-          {stats.topCustomers.map((cust, i) => (
-            <View key={cust.name} style={s.customerRow}>
-              <View style={s.customerRank}>
-                <Text style={s.rankNum}>{i + 1}</Text>
-              </View>
-              <View style={s.customerInfo}>
-                <Text style={s.customerName} numberOfLines={1}>{cust.name}</Text>
-                <Text style={s.customerMeta}>{cust.count} booking{cust.count !== 1 ? 's' : ''}</Text>
-              </View>
-              <Text style={s.customerRevenue}>{fmt(cust.revenue)}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Monthly Trend */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Monthly Trend</Text>
-          <Text style={s.trendSubtitle}>Revenue per week — {currentYM}</Text>
-          <View style={s.chartContainer}>
-            {stats.weeklyTrend.map((w) => (
-              <View key={w.week} style={s.chartCol}>
-                <Text style={s.chartVal}>{w.revenue > 0 ? fmt(w.revenue) : '-'}</Text>
-                <View style={s.chartBarOuter}>
-                  <View
-                    style={[
-                      s.chartBar,
-                      {
-                        height: maxWeekRevenue > 0 ? `${(w.revenue / maxWeekRevenue) * 100}%` : '0%',
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={s.chartLabel}>{w.week}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={{ height: 40 }} />
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-// Small helper for financial rows: label on the left, money on the right.
-function FinRow({ label, cents, count, negative }) {
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
-      <View>
-        <Text style={{ fontSize: 13, color: '#1A1A1A', fontWeight: '600' }}>{label}</Text>
-        {count != null && <Text style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{count} {count === 1 ? 'transaction' : 'transactions'}</Text>}
-      </View>
-      <Text style={{ fontSize: 15, fontWeight: '700', color: negative ? '#C00' : '#1A1A1A' }}>
-        {negative && cents < 0 ? '-' : ''}${Math.abs((cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-      </Text>
+    <View style={{ marginBottom: 18 }}>
+      <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A1A', marginBottom: 8 }}>{title}</Text>
+      {children}
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: C.surface,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: C.surfaceHigh,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: C.surfaceHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: C.onSurface,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
+function Bar({ label, cents, total, color }) {
+  const p = total > 0 ? Math.max(0, Math.min(100, (cents / total) * 100)) : 0;
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>{label}</Text>
+        <Text style={{ fontSize: 13, fontWeight: '800', color: '#1A1A1A' }}>
+          {fmt(cents)} <Text style={{ color: '#888', fontWeight: '600' }}>({p.toFixed(0)}%)</Text>
+        </Text>
+      </View>
+      <View style={{ height: 8, backgroundColor: '#EFEFEF', borderRadius: 4, overflow: 'hidden' }}>
+        <View style={{ width: `${p}%`, height: 8, backgroundColor: color, borderRadius: 4 }} />
+      </View>
+    </View>
+  );
+}
 
-  // Summary cards
-  cardsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  card: {
-    backgroundColor: C.surfaceLow,
-    borderRadius: 14,
-    padding: 16,
-  },
-  cardHalf: {
-    flex: 1,
-  },
-  cardLabel: {
-    fontSize: 13,
-    color: C.onSurfaceVariant,
-    marginBottom: 6,
-  },
-  cardValueBig: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: C.primaryContainer,
-  },
-  cardValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: C.onSurface,
-  },
-  cardHint: {
-    fontSize: 11,
-    color: C.onSurfaceVariant,
-    marginTop: 4,
-  },
+export default function RevenueScreen() {
+  const router = useRouter();
+  const now = new Date();
+  const [year, setYear] = useState(now.getUTCFullYear());
+  const [month, setMonth] = useState(now.getUTCMonth());
+  const [loading, setLoading] = useState(true);
+  const [tx, setTx] = useState([]);
+  const [prevCollected, setPrevCollected] = useState(null);
+  const [unitRows, setUnitRows] = useState([]);
 
-  // Sections
-  section: {
-    marginTop: 24,
-    backgroundColor: C.surfaceLow,
-    borderRadius: 14,
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: C.onSurface,
-    marginBottom: 16,
-  },
+  const load = useCallback(async () => {
+    setLoading(true);
+    const from = new Date(Date.UTC(year, month, 1)).toISOString();
+    const to = new Date(Date.UTC(year, month + 1, 1)).toISOString();
 
-  // Rep rows
-  repRow: {
-    marginBottom: 16,
-  },
-  repHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  repName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: C.onSurface,
-  },
-  repRevenue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: C.primary,
-  },
-  repMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  repMetaText: {
-    fontSize: 12,
-    color: C.onSurfaceVariant,
-    marginBottom: 6,
-  },
+    // Ledger with the linked booking's source/rep embedded (FK join).
+    const { data } = await supabase
+      .from('transactions')
+      .select('amount_cents, category, payment_method, booking_id, metadata, bookings(source, sales_rep)')
+      .gte('occurred_at', from)
+      .lt('occurred_at', to);
+    setTx(data || []);
 
-  // Progress bars
-  barBg: {
-    height: 8,
-    backgroundColor: C.surfaceHighest,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: 8,
-    borderRadius: 4,
-  },
+    // Same day-range of the previous month, for a fair comparison.
+    const day = Math.min(now.getUTCDate(), 28);
+    const isCurrentMonth = year === now.getUTCFullYear() && month === now.getUTCMonth();
+    const prevFrom = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+    const prevTo = isCurrentMonth
+      ? new Date(Date.UTC(year, month - 1, day, 23, 59, 59)).toISOString()
+      : new Date(Date.UTC(year, month, 1)).toISOString();
+    const { data: prev } = await supabase
+      .from('transactions')
+      .select('amount_cents')
+      .gte('occurred_at', prevFrom)
+      .lt('occurred_at', prevTo);
+    setPrevCollected((prev || []).reduce((s, r) => s + (r.amount_cents || 0), 0));
 
-  // Top customers
-  customerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: C.surfaceHigh,
-  },
-  customerRank: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: C.surfaceHighest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  rankNum: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: C.primary,
-  },
-  customerInfo: {
-    flex: 1,
-    marginRight: 8,
-  },
-  customerName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: C.onSurface,
-  },
-  customerMeta: {
-    fontSize: 12,
-    color: C.onSurfaceVariant,
-    marginTop: 2,
-  },
-  customerRevenue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: C.primary,
-  },
+    // Units delivered this month, by size (operational truth from bookings).
+    const cid = await getCompanyId();
+    if (cid) {
+      const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const nextStart = month === 11
+        ? `${year + 1}-01-01`
+        : `${year}-${String(month + 2).padStart(2, '0')}-01`;
+      const { data: units } = await supabase
+        .from('bookings')
+        .select('dumpster_size, service_type')
+        .eq('company_id', cid)
+        .neq('status', 'cancelled')
+        .gte('scheduled_date', monthStart)
+        .lt('scheduled_date', nextStart);
+      setUnitRows(units || []);
+    }
+    setLoading(false);
+  }, [year, month]);
 
-  // Monthly trend chart
-  trendSubtitle: {
-    fontSize: 12,
-    color: C.onSurfaceVariant,
-    marginBottom: 16,
-    marginTop: -8,
-  },
-  chartContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    height: 180,
-  },
-  chartCol: {
-    flex: 1,
-    alignItems: 'center',
-    height: '100%',
-    justifyContent: 'flex-end',
-  },
-  chartVal: {
-    fontSize: 10,
-    color: C.onSurfaceVariant,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  chartBarOuter: {
-    flex: 1,
-    width: 32,
-    justifyContent: 'flex-end',
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: C.surfaceHighest,
-  },
-  chartBar: {
-    width: '100%',
-    backgroundColor: C.primaryContainer,
-    borderRadius: 6,
-    minHeight: 2,
-  },
-  chartLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.onSurfaceVariant,
-    marginTop: 6,
-  },
-});
+  useEffect(() => { load(); }, [load]);
+
+  const report = useMemo(() => {
+    let collected = 0, refunds = 0;
+    const source = { online: 0, phone: 0, direct: 0 };
+    const reps = {};
+    const customers = {};
+    for (const r of tx) {
+      const a = r.amount_cents || 0;
+      if (r.category === 'refund' || r.category === 'chargeback') { refunds += a; collected += a; continue; }
+      if (a <= 0) continue;
+      collected += a;
+      const b = r.bookings;
+      if (b?.source === 'website') source.online += a;
+      else if (b) source.phone += a;
+      else source.direct += a;
+      const rep = b?.sales_rep;
+      if (rep) reps[rep] = (reps[rep] || 0) + a;
+      const name = r.metadata?.customer_name;
+      if (name) customers[name] = (customers[name] || 0) + a;
+    }
+    const change = prevCollected > 0 ? ((collected - prevCollected) / prevCollected) * 100 : null;
+    const sizes = {};
+    for (const u of unitRows) {
+      const key = `${u.dumpster_size || '?'}yd`;
+      sizes[key] = (sizes[key] || 0) + 1;
+    }
+    const topCustomers = Object.entries(customers).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    return { collected, refunds, source, reps, sizes, units: unitRows.length, change, topCustomers };
+  }, [tx, prevCollected, unitRows]);
+
+  function prevMonth() {
+    if (month === 0) { setMonth(11); setYear(year - 1); } else setMonth(month - 1);
+  }
+  function nextMonth() {
+    if (month === 11) { setMonth(0); setYear(year + 1); } else setMonth(month + 1);
+  }
+
+  const sourceTotal = report.source.online + report.source.phone + report.source.direct;
+  const repNames = Object.entries(report.reps).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E5E5' }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ padding: 4, marginRight: 8 }}>
+          <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: '#1A1A1A', flex: 1 }}>Sales</Text>
+        <TouchableOpacity onPress={prevMonth} style={{ padding: 6 }}>
+          <Ionicons name="chevron-back" size={20} color="#1A1A1A" />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A1A1A', minWidth: 110, textAlign: 'center' }}>
+          {MONTHS[month]} {year}
+        </Text>
+        <TouchableOpacity onPress={nextMonth} style={{ padding: 6 }}>
+          <Ionicons name="chevron-forward" size={20} color="#1A1A1A" />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color="#FFCD11" />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          {/* Total */}
+          <View style={{ backgroundColor: '#14213D', borderRadius: 14, padding: 18, marginBottom: 18 }}>
+            <Text style={{ color: '#9fb0d0', fontSize: 11, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+              Total sales · collected
+            </Text>
+            <Text style={{ color: '#FFCD11', fontSize: 34, fontWeight: '800', marginTop: 4 }}>
+              {fmt(report.collected)}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 14, marginTop: 6 }}>
+              {report.change !== null && (
+                <Text style={{ color: report.change >= 0 ? '#85cfff' : '#ffb4ab', fontWeight: '700', fontSize: 12 }}>
+                  {report.change >= 0 ? '▲ +' : '▼ '}{report.change.toFixed(1)}% vs same days last month
+                </Text>
+              )}
+              {report.refunds !== 0 && (
+                <Text style={{ color: '#ffb4ab', fontWeight: '700', fontSize: 12 }}>
+                  refunds -{fmt(report.refunds)}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {/* Where it came from */}
+          <Section title="Where it came from">
+            <Bar label="Online bookings" cents={report.source.online} total={sourceTotal} color="#3B82F6" />
+            <Bar label="Phone / in-app" cents={report.source.phone} total={sourceTotal} color="#FFCD11" />
+            <Bar label="Direct invoices" cents={report.source.direct} total={sourceTotal} color="#9CA3AF" />
+          </Section>
+
+          {/* By seller (only when reps exist) */}
+          {repNames.length > 0 && (
+            <Section title="By seller">
+              {repNames.map(([rep, cents]) => (
+                <Bar
+                  key={rep}
+                  label={rep.charAt(0).toUpperCase() + rep.slice(1)}
+                  cents={cents}
+                  total={report.collected}
+                  color="#16A34A"
+                />
+              ))}
+              <Text style={{ color: '#999', fontSize: 11 }}>
+                Only payments linked to a booking with a seller are counted here.
+              </Text>
+            </Section>
+          )}
+
+          {/* What sold */}
+          <Section title={`Dumpsters out this month: ${report.units}`}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {Object.entries(report.sizes).sort().map(([size, n]) => (
+                <View key={size} style={{ backgroundColor: '#F7F7F7', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, minWidth: 90, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#1A1A1A' }}>{n}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#666' }}>{size}</Text>
+                </View>
+              ))}
+              {report.units === 0 && (
+                <Text style={{ color: '#888' }}>No deliveries scheduled this month.</Text>
+              )}
+            </View>
+          </Section>
+
+          {/* Star customers */}
+          <Section title="Star customers">
+            {report.topCustomers.length === 0 && (
+              <Text style={{ color: '#888' }}>No customer data yet this month.</Text>
+            )}
+            {report.topCustomers.map(([name, cents], i) => (
+              <View key={name} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
+                <Text style={{ width: 24, color: '#FFCD11', fontWeight: '800', fontSize: 14 }}>{i + 1}</Text>
+                <Text style={{ flex: 1, fontWeight: '700', color: '#1A1A1A', fontSize: 13 }} numberOfLines={1}>{name}</Text>
+                <Text style={{ fontWeight: '800', fontSize: 14, color: '#1A1A1A' }}>{fmt(cents)}</Text>
+              </View>
+            ))}
+            <TouchableOpacity onPress={() => router.push('/payments')} style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+              <Text style={{ color: '#1D4ED8', fontWeight: '700', fontSize: 13 }}>
+                See every payment & full customer ranking →
+              </Text>
+            </TouchableOpacity>
+          </Section>
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
+}
