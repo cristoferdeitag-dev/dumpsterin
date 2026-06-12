@@ -156,6 +156,26 @@ async function handleInvoicePaid(
   const booking = bookingNumber ? await findBookingByNumber(bookingNumber) : null;
 
   const oobMethod = md.oob_method === "cash" || md.oob_method === "zelle" ? md.oob_method : "other";
+
+  // Keep the invoice's line items (and an extras breakdown) on the ledger row
+  // so the Sales report can show overweight / extra-day money without asking
+  // Stripe again.
+  const lineData =
+    ((invoice.lines as { data?: Array<Record<string, unknown>> } | undefined)?.data) || [];
+  let owCents = 0, dayCents = 0, otherFeeCents = 0;
+  for (const l of lineData) {
+    const d = ((l.description as string) || "").toLowerCase();
+    const a = (l.amount as number) || 0;
+    if (a <= 0) continue;
+    if (/extra weight|overweight/.test(d)) owCents += a;
+    else if (/extra day|additional day|extension/.test(d)) dayCents += a;
+    else if (/dead run|trip fee|relocation|late fee|special item|mattress|tire/.test(d)) otherFeeCents += a;
+  }
+  const extrasMeta =
+    owCents || dayCents || otherFeeCents
+      ? { extras_cents: { overweight: owCents, extra_days: dayCents, other: otherFeeCents } }
+      : {};
+
   await recordTransaction({
     occurred_at: paidAt,
     category: paidOob ? "provider_invoice_oob_payment" : "provider_invoice_charge",
@@ -168,11 +188,15 @@ async function handleInvoicePaid(
     stripe_event_id: eventId,
     description: `${customerName} · ${(invoice.number as string) || invoiceId}`,
     metadata: {
-      needs_review: !booking,
       customer_name: customerName,
       invoice_number: (invoice.number as string) || null,
       booking_number: bookingNumber || null,
       source: "stripe-webhook",
+      lines: lineData.slice(0, 8).map((l) => ({
+        d: ((l.description as string) || "").slice(0, 70),
+        a: (l.amount as number) || 0,
+      })),
+      ...extrasMeta,
     },
   });
 

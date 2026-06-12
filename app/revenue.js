@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase, getCompanyId } from '../src/lib/supabase';
+import { useAuth } from '../src/context/AuthContext';
 
 // Sales report, provider-first (Cris 2026-06-11): one simple page a provider
 // understands at a glance — total collected, where it came from, what sold,
@@ -51,6 +52,11 @@ function Bar({ label, cents, total, color }) {
 
 export default function RevenueScreen() {
   const router = useRouter();
+  const { profile } = useAuth();
+  // Unlinked manual invoices are attributed to the company's default seller
+  // (for TP that's Asaí — she makes every hand invoice). Each provider can
+  // have their own; without one they show as "Direct invoices".
+  const defaultSeller = profile?.companies?.settings?.default_seller || 'Direct invoices';
   const now = new Date();
   const [year, setYear] = useState(now.getUTCFullYear());
   const [month, setMonth] = useState(now.getUTCMonth());
@@ -58,6 +64,7 @@ export default function RevenueScreen() {
   const [tx, setTx] = useState([]);
   const [prevCollected, setPrevCollected] = useState(null);
   const [unitRows, setUnitRows] = useState([]);
+  const [priorNames, setPriorNames] = useState(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,7 +93,18 @@ export default function RevenueScreen() {
       .lt('occurred_at', prevTo);
     setPrevCollected((prev || []).reduce((s, r) => s + (r.amount_cents || 0), 0));
 
-    // Units delivered this month, by size (operational truth from bookings).
+    // Customers seen BEFORE this month → lets us split new vs repeat.
+    const { data: prior } = await supabase
+      .from('transactions')
+      .select('metadata')
+      .lt('occurred_at', from)
+      .gt('amount_cents', 0)
+      .limit(2000);
+    setPriorNames(new Set((prior || [])
+      .map((r) => (r.metadata?.customer_name || '').toLowerCase().trim())
+      .filter(Boolean)));
+
+    // Units delivered this month, by size, with their money (from bookings).
     const cid = await getCompanyId();
     if (cid) {
       const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
@@ -95,7 +113,7 @@ export default function RevenueScreen() {
         : `${year}-${String(month + 2).padStart(2, '0')}-01`;
       const { data: units } = await supabase
         .from('bookings')
-        .select('dumpster_size, service_type')
+        .select('dumpster_size, base_price, discount, paid_amount')
         .eq('company_id', cid)
         .neq('status', 'cancelled')
         .gte('scheduled_date', monthStart)
@@ -108,33 +126,59 @@ export default function RevenueScreen() {
   useEffect(() => { load(); }, [load]);
 
   const report = useMemo(() => {
-    let collected = 0, refunds = 0;
-    const source = { online: 0, phone: 0, direct: 0 };
-    const reps = {};
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    let collected = 0, refunds = 0, salesCount = 0;
+    const sellers = {}; // 'Online bookings' | rep name | defaultSeller
     const customers = {};
+    const extras = { overweight: 0, extra_days: 0, other: 0 };
+    let newMoney = 0, repeatMoney = 0, newCount = 0, repeatCount = 0;
+    const seenThisMonth = new Set();
     for (const r of tx) {
       const a = r.amount_cents || 0;
       if (r.category === 'refund' || r.category === 'chargeback') { refunds += a; collected += a; continue; }
       if (a <= 0) continue;
       collected += a;
+      salesCount += 1;
       const b = r.bookings;
-      if (b?.source === 'website') source.online += a;
-      else if (b) source.phone += a;
-      else source.direct += a;
-      const rep = b?.sales_rep;
-      if (rep) reps[rep] = (reps[rep] || 0) + a;
+      const who = b?.source === 'website'
+        ? 'Online bookings'
+        : b?.sales_rep
+          ? cap(b.sales_rep)
+          : defaultSeller;
+      sellers[who] = (sellers[who] || 0) + a;
       const name = r.metadata?.customer_name;
-      if (name) customers[name] = (customers[name] || 0) + a;
+      if (name) {
+        customers[name] = (customers[name] || 0) + a;
+        const key = name.toLowerCase().trim();
+        const isRepeat = priorNames.has(key) || seenThisMonth.has(key);
+        if (isRepeat) { repeatMoney += a; repeatCount += 1; }
+        else { newMoney += a; newCount += 1; }
+        seenThisMonth.add(key);
+      }
+      const ex = r.metadata?.extras_cents;
+      if (ex) {
+        extras.overweight += ex.overweight || 0;
+        extras.extra_days += ex.extra_days || 0;
+        extras.other += ex.other || 0;
+      }
     }
     const change = prevCollected > 0 ? ((collected - prevCollected) / prevCollected) * 100 : null;
     const sizes = {};
     for (const u of unitRows) {
       const key = `${u.dumpster_size || '?'}yd`;
-      sizes[key] = (sizes[key] || 0) + 1;
+      const money = Math.round(((Number(u.paid_amount) || 0) || (Number(u.base_price) || 0) - (Number(u.discount) || 0)) * 100);
+      if (!sizes[key]) sizes[key] = { n: 0, cents: 0 };
+      sizes[key].n += 1;
+      sizes[key].cents += Math.max(0, money);
     }
     const topCustomers = Object.entries(customers).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    return { collected, refunds, source, reps, sizes, units: unitRows.length, change, topCustomers };
-  }, [tx, prevCollected, unitRows]);
+    const extrasTotal = extras.overweight + extras.extra_days + extras.other;
+    const avgTicket = salesCount > 0 ? collected / salesCount : 0;
+    return {
+      collected, refunds, sellers, sizes, units: unitRows.length, change, topCustomers,
+      extras, extrasTotal, salesCount, avgTicket, newMoney, repeatMoney, newCount, repeatCount,
+    };
+  }, [tx, prevCollected, unitRows, priorNames, defaultSeller]);
 
   function prevMonth() {
     if (month === 0) { setMonth(11); setYear(year - 1); } else setMonth(month - 1);
@@ -143,8 +187,8 @@ export default function RevenueScreen() {
     if (month === 11) { setMonth(0); setYear(year + 1); } else setMonth(month + 1);
   }
 
-  const sourceTotal = report.source.online + report.source.phone + report.source.direct;
-  const repNames = Object.entries(report.reps).sort((a, b) => b[1] - a[1]);
+  const sellerEntries = Object.entries(report.sellers).sort((a, b) => b[1] - a[1]);
+  const SELLER_COLORS = ['#FFCD11', '#3B82F6', '#16A34A', '#9333EA', '#F97316', '#9CA3AF'];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
@@ -192,38 +236,72 @@ export default function RevenueScreen() {
             </View>
           </View>
 
-          {/* Where it came from */}
-          <Section title="Where it came from">
-            <Bar label="Online bookings" cents={report.source.online} total={sourceTotal} color="#3B82F6" />
-            <Bar label="Phone / in-app" cents={report.source.phone} total={sourceTotal} color="#FFCD11" />
-            <Bar label="Direct invoices" cents={report.source.direct} total={sourceTotal} color="#9CA3AF" />
+          {/* Who sold it — Online bookings + every seller (Asai, Tiago, and any
+              seller a provider registers shows up here automatically) */}
+          <Section title="Who sold it">
+            {sellerEntries.map(([who, cents], i) => (
+              <Bar
+                key={who}
+                label={who}
+                cents={cents}
+                total={report.collected}
+                color={SELLER_COLORS[i % SELLER_COLORS.length]}
+              />
+            ))}
           </Section>
 
-          {/* By seller (only when reps exist) */}
-          {repNames.length > 0 && (
-            <Section title="By seller">
-              {repNames.map(([rep, cents]) => (
-                <Bar
-                  key={rep}
-                  label={rep.charAt(0).toUpperCase() + rep.slice(1)}
-                  cents={cents}
-                  total={report.collected}
-                  color="#16A34A"
-                />
-              ))}
-              <Text style={{ color: '#999', fontSize: 11 }}>
-                Only payments linked to a booking with a seller are counted here.
+          {/* Owner numbers at a glance */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+            <View style={{ flexGrow: 1, minWidth: '30%', backgroundColor: '#F7F7F7', borderRadius: 10, padding: 12 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#666' }}>Sales</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#1A1A1A' }}>{report.salesCount}</Text>
+            </View>
+            <View style={{ flexGrow: 1, minWidth: '30%', backgroundColor: '#F7F7F7', borderRadius: 10, padding: 12 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#666' }}>Avg ticket</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#1A1A1A' }}>{fmt(report.avgTicket)}</Text>
+            </View>
+            <View style={{ flexGrow: 1, minWidth: '30%', backgroundColor: '#F7F7F7', borderRadius: 10, padding: 12 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#666' }}>New vs repeat</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#1A1A1A' }}>
+                {report.newCount} new · {report.repeatCount} repeat
               </Text>
-            </Section>
-          )}
+              <Text style={{ fontSize: 11, color: '#888' }}>
+                {fmt(report.newMoney)} / {fmt(report.repeatMoney)}
+              </Text>
+            </View>
+          </View>
 
-          {/* What sold */}
+          {/* Extra charges */}
+          <Section title={`Extra charges: ${fmt(report.extrasTotal)}`}>
+            {report.extrasTotal === 0 ? (
+              <Text style={{ color: '#888' }}>No extra charges collected this month.</Text>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {[
+                  { label: 'Overweight', v: report.extras.overweight },
+                  { label: 'Extra days', v: report.extras.extra_days },
+                  { label: 'Other fees', v: report.extras.other },
+                ].filter((e) => e.v > 0).map((e) => (
+                  <View key={e.label} style={{ backgroundColor: '#FFF8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, minWidth: 100, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#8a6d00' }}>{fmt(e.v)}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#8a6d00' }}>{e.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <Text style={{ color: '#999', fontSize: 11, marginTop: 6 }}>
+              Money recovered on top of the rental price — straight from the invoice lines.
+            </Text>
+          </Section>
+
+          {/* What sold, with its money */}
           <Section title={`Dumpsters out this month: ${report.units}`}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {Object.entries(report.sizes).sort().map(([size, n]) => (
-                <View key={size} style={{ backgroundColor: '#F7F7F7', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, minWidth: 90, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#1A1A1A' }}>{n}</Text>
+              {Object.entries(report.sizes).sort().map(([size, info]) => (
+                <View key={size} style={{ backgroundColor: '#F7F7F7', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, minWidth: 104, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#1A1A1A' }}>{info.n}</Text>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#666' }}>{size}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#16A34A', marginTop: 2 }}>{fmt(info.cents)}</Text>
                 </View>
               ))}
               {report.units === 0 && (
