@@ -53,6 +53,17 @@ const SALES_REPS = ["asai", "tiago", "web"];
 
 const READ_TOOLS = [
   {
+    name: "suggest_route",
+    description:
+      "Suggest the optimal job order for a day: deliveries then pickups by proximity (morning windows first), with miles/minutes per leg, starting/ending at the yard and a transfer-station stop after pickups. Use for ANY route/itinerary question, including 'should I go back to the yard or straight to the next job?'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "YYYY-MM-DD. Default: today." },
+      },
+    },
+  },
+  {
     name: "query_bookings",
     description:
       "Search bookings for the current company. Filters compose with AND. Use this for any question about jobs, deliveries, customers, or schedule.",
@@ -489,7 +500,95 @@ function summarize(action: string, args: Record<string, unknown>): string {
 }
 
 // ── Read tools ──
+function havMiles(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 3958.8 * Math.asin(Math.sqrt(s)) * 1.3; // ×1.3 road detour factor
+}
+const driveMin = (mi: number) => Math.round((mi / 28) * 60) + 4;
+
 async function runReadTool(name: string, input: Record<string, unknown>, companyId: string): Promise<unknown> {
+  if (name === "suggest_route") {
+    const date = (input.date as string) || new Date().toISOString().slice(0, 10);
+    const params = new URLSearchParams();
+    params.set("company_id", `eq.${companyId}`);
+    params.set("select", "booking_number,customer_name,address,city,dumpster_size,scheduled_date,pickup_date,delivery_window,status,lat,lng");
+    params.set("or", `(scheduled_date.eq.${date},pickup_date.eq.${date})`);
+    params.set("limit", "60");
+    const res = await rest(`/bookings?${params}`);
+    if (!res.ok) throw new Error(`route bookings query ${res.status}`);
+    const rows = (await res.json()) as Array<Record<string, any>>;
+
+    const compRes = await rest(`/companies?id=eq.${companyId}&select=settings`);
+    const comp = compRes.ok ? ((await compRes.json())[0] as Record<string, any> | undefined) : undefined;
+    const yard = comp?.settings?.locations?.yard || null;
+    const transfer = comp?.settings?.locations?.transfer_station || null;
+
+    type Job = { kind: string; name: string; size: any; window: any; lat: number | null; lng: number | null; status: string; city: string };
+    const jobs: Job[] = [];
+    for (const b of rows) {
+      if (b.status === "cancelled") continue;
+      const base = { name: b.customer_name, size: b.dumpster_size, window: b.delivery_window, lat: b.lat, lng: b.lng, status: b.status, city: b.city };
+      if (b.scheduled_date === date && !["delivered", "picked_up", "completed"].includes(b.status)) jobs.push({ ...base, kind: "delivery" });
+      if (b.pickup_date === date && !["picked_up", "completed"].includes(b.status)) jobs.push({ ...base, kind: "pickup" });
+    }
+
+    const nn = (start: any, list: Job[]) => {
+      const rem = [...list];
+      const out: Array<Job & { legMiles: number | null }> = [];
+      let cur = start;
+      while (rem.length) {
+        let bi = 0, bd = Infinity;
+        for (let i = 0; i < rem.length; i++) {
+          const d = rem[i].lat != null && cur ? havMiles(cur, rem[i] as any) : 9999;
+          if (d < bd) { bd = d; bi = i; }
+        }
+        const nx = rem.splice(bi, 1)[0];
+        out.push({ ...nx, legMiles: bd === 9999 ? null : Math.round(bd * 10) / 10 });
+        if (nx.lat != null) cur = nx;
+      }
+      return out;
+    };
+    const isAM = (j: Job) => /am|morning|7|8|9/i.test(String(j.window || ""));
+    const dels = jobs.filter((j) => j.kind === "delivery");
+    const picks = jobs.filter((j) => j.kind === "pickup");
+    const ordered = [
+      ...nn(yard, dels.filter(isAM)),
+      ...nn(yard, dels.filter((j) => !isAM(j))),
+    ];
+    const lastWithCoords = [...ordered].reverse().find((j) => j.lat != null) || yard;
+    const orderedPicks = nn(lastWithCoords, picks);
+
+    const steps: Array<Record<string, unknown>> = [];
+    let totalMi = 0;
+    const push = (s: Record<string, unknown>, mi: number | null) => {
+      if (mi != null) { totalMi += mi; s.miles = Math.round(mi * 10) / 10; s.drive_minutes = driveMin(mi); }
+      steps.push(s);
+    };
+    if (yard) steps.push({ step: "start", label: "Leave the yard" });
+    for (const j of ordered) push({ step: "delivery", customer: j.name, size: j.size, city: j.city, window: j.window }, j.legMiles);
+    for (const j of orderedPicks) push({ step: "pickup", customer: j.name, size: j.size, city: j.city }, j.legMiles);
+    let cursor: any = [...orderedPicks, ...ordered].reverse().find((j) => j.lat != null) || yard;
+    if (orderedPicks.length > 0 && transfer && cursor) {
+      const mi = havMiles(cursor, transfer);
+      push({ step: "transfer_station", label: "Unload full boxes at Devlin Road" }, mi);
+      cursor = transfer;
+    }
+    if (yard && cursor) push({ step: "return_yard", label: "Back to the yard" }, havMiles(cursor, yard));
+
+    return {
+      date,
+      deliveries: dels.length,
+      pickups: picks.length,
+      jobs_without_gps: jobs.filter((j) => j.lat == null).length,
+      total_miles: Math.round(totalMi),
+      total_estimated_minutes: steps.reduce((s, st) => s + ((st.drive_minutes as number) || 0), 0) + ordered.length * 12 + orderedPicks.length * 15,
+      steps,
+      method: "straight-line nearest-neighbor ×1.3 road factor, ~28 mph + handling time; morning windows first. Estimates, not traffic-aware.",
+    };
+  }
   if (name === "query_bookings") {
     const rows = await fetchBookingsRaw(companyId, input);
     const enriched = rows.map((r) => ({ ...r, channel: channelOf(r as any) }));
@@ -911,7 +1010,9 @@ DATOS:
 - Canales: website (tpdumpsters.com online), tiago (manual Tiago), asai (manual default).
 - dumpsters: label físico (ej. 10YD-01), size_yards, status (available/deployed/maintenance).
 
-TOOLS DE LECTURA: query_bookings, query_revenue, forecast_month, find_booking, where_is_dumpster.
+TOOLS DE LECTURA: query_bookings, query_revenue, forecast_month, find_booking, where_is_dumpster, suggest_route.
+
+RUTAS: para cualquier pregunta de itinerario/ruta/"¿regreso a la yarda o sigo al siguiente?" usa suggest_route y EXPLICA el porqué de la secuencia (cercanía, ventanas AM primero, descarga en transfer station después de las recogidas). Aclara que los tiempos son estimados sin tráfico. Si hay jobs sin GPS, dilo.
 
 REGLA DE DINERO (crítica): para CUALQUIER pregunta de dinero/ingresos usa query_revenue, que reporta lo COBRADO de verdad (libro conectado a Stripe — la misma verdad que la pantalla Sales). Responde con "cobrado/recibido", nunca con "cerrados/esperados". El unpaid_pipeline (agendado aún no cobrado) menciónalo SOLO si el usuario pregunta explícitamente por lo pendiente o por proyecciones, y déjalo claro como secundario. No inventes proyecciones salvo que te las pidan (usa forecast_month).
 TOOLS DE ESCRITURA: create_booking, update_booking, reschedule_booking, cancel_booking, change_status, create_quote, cancel_quote.

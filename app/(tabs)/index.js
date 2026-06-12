@@ -253,6 +253,52 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* TODAY — the day's work front and center (Cris 2026-06-12) */}
+        {(() => {
+          const today = new Date().toISOString().slice(0, 10);
+          const live = bookings.filter((b) => b.status !== 'cancelled');
+          const del = live.filter((b) => b.deliveryDate === today);
+          const pick = live.filter((b) => b.pickupDate === today);
+          const done =
+            del.filter((b) => ['on_site', 'delivered', 'completed'].includes(b.status)).length +
+            pick.filter((b) => ['picked_up', 'completed'].includes(b.status)).length;
+          const total = del.length + pick.length;
+          return (
+            <TouchableOpacity
+              onPress={() => router.push('/today')}
+              activeOpacity={0.85}
+              style={{ backgroundColor: '#FFCD11', borderRadius: 12, padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#14213D', fontSize: 11, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>
+                  Today's work
+                </Text>
+                <Text style={{ color: '#14213D', fontSize: 20, fontWeight: '800', marginTop: 2 }}>
+                  {total === 0
+                    ? 'No jobs today'
+                    : `${del.length} deliver${del.length === 1 ? 'y' : 'ies'} · ${pick.length} pickup${pick.length === 1 ? '' : 's'}`}
+                </Text>
+                {total > 0 && (
+                  <Text style={{ color: '#5a5210', fontSize: 12, fontWeight: '700', marginTop: 2 }}>
+                    {done}/{total} done — tap for the board & route
+                  </Text>
+                )}
+              </View>
+              <Ionicons name="chevron-forward-circle" size={34} color="#14213D" />
+            </TouchableOpacity>
+          );
+        })()}
+
+        {/* Honest failure: never show stale/demo data — say it out loud. */}
+        {state.loadError && (
+          <View style={{ backgroundColor: '#FDECEA', borderWidth: 1, borderColor: '#F5C6C0', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="cloud-offline-outline" size={18} color="#C00" />
+            <Text style={{ color: '#900', fontSize: 13, fontWeight: '600', flex: 1 }}>
+              Couldn't load live data. Check your connection and reload — nothing is lost.
+            </Text>
+          </View>
+        )}
+
         {/* Service Area Check moved to the Map tab — Asaí 2026-04-30 */}
 
         {/* Revenue Card — compact (Asaí 2026-04-30): smaller height, hide/show

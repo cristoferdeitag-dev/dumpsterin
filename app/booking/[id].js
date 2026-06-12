@@ -195,12 +195,12 @@ export default function BookingDetail() {
   const handleResendInvoice = async () => {
     if (resending) return;
     Alert.alert(
-      'Reenviar invoice',
-      `¿Reenviar el email + SMS al cliente con la invoice original?`,
+      'Resend invoice',
+      `Resend the original invoice to the customer by email + SMS?`,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reenviar',
+          text: 'Resend',
           onPress: async () => {
             setResending(true);
             try {

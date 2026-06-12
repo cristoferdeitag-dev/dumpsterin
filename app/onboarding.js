@@ -35,9 +35,9 @@ const C = {
 };
 
 const COUNTRY_CODES = [
-  { code: '+1',  country: 'USA / Canadá', flag: '🇺🇸' },
-  { code: '+52', country: 'México', flag: '🇲🇽' },
-  { code: '+34', country: 'España', flag: '🇪🇸' },
+  { code: '+1',  country: 'USA / Canada', flag: '🇺🇸' },
+  { code: '+52', country: 'Mexico', flag: '🇲🇽' },
+  { code: '+34', country: 'Spain', flag: '🇪🇸' },
   { code: '+57', country: 'Colombia', flag: '🇨🇴' },
   { code: '+54', country: 'Argentina', flag: '🇦🇷' },
   { code: '+56', country: 'Chile', flag: '🇨🇱' },

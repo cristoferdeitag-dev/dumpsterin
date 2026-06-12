@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
-import { initialBookings, initialDumpsters, initialDrivers } from '../data/mockData';
 import { fetchBookings, fetchDumpsters, fetchDrivers } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
@@ -70,18 +69,10 @@ function appReducer(state, action) {
   }
 }
 
-// Fallback to mock data while we wait for Supabase.
+// Empty until Supabase answers. Showing stale demo data here made providers
+// believe their real bookings had vanished — an honest error beats a lie.
 function getInitialState() {
-  const dumpsters = [...initialDumpsters];
-  initialBookings.forEach(b => {
-    if (b.assignedDumpster && b.status !== 'completed' && b.status !== 'cancelled') {
-      const idx = dumpsters.findIndex(d => d.id === b.assignedDumpster);
-      if (idx >= 0) {
-        dumpsters[idx] = { ...dumpsters[idx], status: 'on_site', assignedBooking: b.id };
-      }
-    }
-  });
-  return { bookings: initialBookings, dumpsters, drivers: initialDrivers, loading: true };
+  return { bookings: [], dumpsters: [], drivers: [], loading: true, loadError: false };
 }
 
 export function AppProvider({ children }) {
@@ -112,12 +103,16 @@ export function AppProvider({ children }) {
             bookings: bookings || [],
             dumpsters: dumpsters || [],
             drivers: drivers || [],
+            loadError: false,
           },
         });
         console.log(`Loaded: ${bookings.length} bookings, ${dumpsters.length} dumpsters, ${drivers.length} drivers`);
       } catch (err) {
         console.error('Supabase load failed:', err);
-        dispatch({ type: 'SET_DATA', payload: { loading: false } });
+        dispatch({
+          type: 'SET_DATA',
+          payload: { bookings: [], dumpsters: [], drivers: [], loading: false, loadError: true },
+        });
       }
     }
     loadFromSupabase();

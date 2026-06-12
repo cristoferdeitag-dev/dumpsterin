@@ -343,11 +343,9 @@ export default function NewQuoteScreen() {
         </View>
       </ScrollView>
 
-      {/* Sticky footer */}
+      {/* Sticky footer. ("Save as Draft" was a dead button — removed until
+          drafts actually exist.) */}
       <View style={s.footer}>
-        <TouchableOpacity style={s.btnSecondary}>
-          <Text style={s.btnSecondaryText}>Save as Draft</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={[s.btnPrimary, (sending || !customer || items.length === 0) && { opacity: 0.5 }]} onPress={handleSend} disabled={sending || !customer || items.length === 0}>
           {sending ? (
             <ActivityIndicator color={C.onPrimary} />

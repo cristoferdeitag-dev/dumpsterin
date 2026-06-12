@@ -68,7 +68,10 @@ export default function EditBooking() {
     setName(booking.customerName || '');
     setPhone(booking.phone || '');
     setEmail(booking.email || '');
-    setAddress(booking.address || '');
+    // App shape stores the full address as deliveryAddress (street, city,
+    // state, zip). Reading `booking.address` here showed an empty field and
+    // silently discarded address edits on save.
+    setAddress(booking.deliveryAddress || '');
     setDeliveryDate(booking.deliveryDate || '');
     // Try to match delivery window back to an id
     const matchedWindow = DELIVERY_WINDOWS.find(
@@ -167,7 +170,7 @@ export default function EditBooking() {
       customerName: name.trim(),
       phone: phone.trim(),
       email: email.trim(),
-      address: address.trim(),
+      deliveryAddress: address.trim(),
       deliveryDate: deliveryDate.trim(),
       deliveryWindow:
         (DELIVERY_WINDOWS.find((w) => w.id === deliveryWindow) || {}).label || deliveryWindow,
