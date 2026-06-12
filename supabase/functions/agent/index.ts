@@ -70,7 +70,7 @@ const READ_TOOLS = [
   {
     name: "query_revenue",
     description:
-      "Sum revenue from bookings in a date range. Splits into closed and expected. Optionally filter by sales channel.",
+      "Money ACTUALLY collected (Stripe ledger) in a date range: total, by seller, card vs cash/zelle, refunds, extras, avg ticket. Also returns unpaid_pipeline (scheduled-not-collected) as secondary info. ALWAYS use this for any money/revenue question.",
     input_schema: {
       type: "object",
       properties: {
@@ -349,7 +349,7 @@ async function fetchBookingsRaw(
   params.set("company_id", `eq.${companyId}`);
   params.set(
     "select",
-    "booking_number,customer_name,customer_phone,address,city,state,zip,service_type,dumpster_size,scheduled_date,status,total,source,sales_rep,dumpster_id,notes"
+    "booking_number,customer_name,customer_phone,address,city,state,zip,service_type,dumpster_size,scheduled_date,status,total,source,sales_rep,dumpster_id,notes,payment_status"
   );
   params.set("order", "scheduled_date.desc.nullslast");
   if (filters.status) params.set("status", `eq.${filters.status}`);
@@ -459,34 +459,61 @@ async function runReadTool(name: string, input: Record<string, unknown>, company
     return { count: enriched.length, rows: enriched };
   }
   if (name === "query_revenue") {
+    // Money ACTUALLY collected, straight from the Stripe-fed ledger — the
+    // same source of truth as the Sales screen and the Home headline.
     const from = input.from_date as string;
     const to = input.to_date as string;
-    const channelFilter = input.channel as string | undefined;
-    const rows = await fetchBookingsRaw(companyId, { from_date: from, to_date: to, limit: 100 });
-    let closed = 0, expected = 0, countClosed = 0, countExpected = 0;
-    const byChannel: Record<string, { closed: number; expected: number; count: number }> = {};
-    for (const b of rows) {
-      const status = b.status as string | null;
-      if (!status || status === "cancelled") continue;
-      const ch = channelOf(b as any);
-      if (channelFilter && ch !== channelFilter) continue;
-      const total = Number(b.total) || 0;
-      const isClosed = CLOSED_STATUSES.includes(status);
-      const isExpected = EXPECTED_STATUSES.includes(status);
-      if (!byChannel[ch]) byChannel[ch] = { closed: 0, expected: 0, count: 0 };
-      byChannel[ch].count += 1;
-      if (isClosed) { closed += total; countClosed += 1; byChannel[ch].closed += total; }
-      else if (isExpected) { expected += total; countExpected += 1; byChannel[ch].expected += total; }
+    const params = new URLSearchParams();
+    params.set("provider_id", `eq.${companyId}`);
+    params.set("select", "amount_cents,category,payment_method,metadata,bookings(source,sales_rep)");
+    params.append("occurred_at", `gte.${from}`);
+    params.append("occurred_at", `lte.${to}T23:59:59Z`);
+    params.set("limit", "1000");
+    const res = await rest(`/transactions?${params}`);
+    if (!res.ok) throw new Error(`transactions query ${res.status}`);
+    const txRows = (await res.json()) as Array<Record<string, any>>;
+
+    const compRes = await rest(`/companies?id=eq.${companyId}&select=settings`);
+    const comp = compRes.ok ? ((await compRes.json())[0] as Record<string, any> | undefined) : undefined;
+    const defaultSeller = comp?.settings?.default_seller || "Direct invoices";
+
+    let collected = 0, refunds = 0, card = 0, oob = 0, salesCount = 0;
+    const bySeller: Record<string, number> = {};
+    const extras = { overweight: 0, extra_days: 0, other: 0 };
+    for (const r of txRows) {
+      const a = Number(r.amount_cents) || 0;
+      if (r.category === "refund" || r.category === "chargeback") { refunds += a; collected += a; continue; }
+      if (a <= 0) continue;
+      collected += a;
+      salesCount += 1;
+      if (r.category === "provider_invoice_oob_payment") oob += a; else card += a;
+      const b = r.bookings;
+      const who = b?.source === "website" ? "Online bookings" : b?.sales_rep
+        ? (b.sales_rep as string).charAt(0).toUpperCase() + (b.sales_rep as string).slice(1)
+        : defaultSeller;
+      bySeller[who] = (bySeller[who] || 0) + a;
+      const ex = r.metadata?.extras_cents;
+      if (ex) { extras.overweight += ex.overweight || 0; extras.extra_days += ex.extra_days || 0; extras.other += ex.other || 0; }
     }
+
+    // Secondary info only: scheduled bookings in range not collected yet.
+    const pending = await fetchBookingsRaw(companyId, { from_date: from, to_date: to, limit: 100 });
+    let unpaid = 0, unpaidCount = 0;
+    for (const b of pending) {
+      if ((b.status as string) === "cancelled") continue;
+      if (((b as any).payment_status || "") !== "paid") { unpaid += Number(b.total) || 0; unpaidCount += 1; }
+    }
+
+    const usd = (c: number) => Math.round(c / 100);
     return {
-      from_date: from, to_date: to, channel_filter: channelFilter || null,
-      closed_revenue: Math.round(closed),
-      expected_revenue: Math.round(expected),
-      total_revenue: Math.round(closed + expected),
-      count_closed: countClosed, count_expected: countExpected,
-      by_channel: Object.fromEntries(
-        Object.entries(byChannel).map(([k, v]) => [k, { closed: Math.round(v.closed), expected: Math.round(v.expected), count: v.count }])
-      ),
+      from_date: from, to_date: to,
+      collected_total_usd: usd(collected),
+      by_seller_usd: Object.fromEntries(Object.entries(bySeller).map(([k, v]) => [k, usd(v)])),
+      card_usd: usd(card), cash_zelle_usd: usd(oob), refunds_usd: usd(refunds),
+      extras_usd: { overweight: usd(extras.overweight), extra_days: usd(extras.extra_days), other: usd(extras.other) },
+      sales_count: salesCount,
+      avg_ticket_usd: salesCount > 0 ? usd(collected / salesCount) : 0,
+      unpaid_pipeline: { amount_usd: Math.round(unpaid), count: unpaidCount, note: "bookings agendados en el rango que AÚN no se cobran — menciónalo solo si te lo preguntan" },
     };
   }
   if (name === "forecast_month") {
@@ -497,29 +524,35 @@ async function runReadTool(name: string, input: Record<string, unknown>, company
     const monthEnd = new Date(Date.UTC(y, m + 1, 0));
     const fmtStart = monthStart.toISOString().slice(0, 10);
     const fmtEnd = monthEnd.toISOString().slice(0, 10);
+    // Run-rate from money ACTUALLY collected (ledger), not booking statuses.
+    void channelFilter;
+    const tparams = new URLSearchParams();
+    tparams.set("provider_id", `eq.${companyId}`);
+    tparams.set("select", "amount_cents,category");
+    tparams.append("occurred_at", `gte.${fmtStart}`);
+    tparams.append("occurred_at", `lte.${fmtEnd}T23:59:59Z`);
+    tparams.set("limit", "1000");
+    const tRes = await rest(`/transactions?${tparams}`);
+    const tRows = tRes.ok ? ((await tRes.json()) as Array<Record<string, any>>) : [];
+    let collectedCents = 0;
+    for (const r of tRows) collectedCents += Number(r.amount_cents) || 0;
+
     const rows = await fetchBookingsRaw(companyId, { from_date: fmtStart, to_date: fmtEnd, limit: 100 });
-    let closed = 0, expected = 0;
-    const byChannel: Record<string, { closed: number; expected: number }> = {};
+    let unpaid = 0, unpaidCount = 0;
     for (const b of rows) {
-      const status = b.status as string | null;
-      if (!status || status === "cancelled") continue;
-      const ch = channelOf(b as any);
-      if (channelFilter && ch !== channelFilter) continue;
-      const total = Number(b.total) || 0;
-      if (!byChannel[ch]) byChannel[ch] = { closed: 0, expected: 0 };
-      if (CLOSED_STATUSES.includes(status)) { closed += total; byChannel[ch].closed += total; }
-      else if (EXPECTED_STATUSES.includes(status)) { expected += total; byChannel[ch].expected += total; }
+      if ((b.status as string) === "cancelled") continue;
+      if (((b as any).payment_status || "") !== "paid") { unpaid += Number(b.total) || 0; unpaidCount += 1; }
     }
     const daysInMonth = monthEnd.getUTCDate();
     const dayOfMonth = now.getUTCDate();
-    const projection = dayOfMonth > 0 ? (closed / dayOfMonth) * daysInMonth : 0;
+    const collected = collectedCents / 100;
+    const projection = dayOfMonth > 0 ? (collected / dayOfMonth) * daysInMonth : 0;
     return {
       month: `${y}-${String(m + 1).padStart(2, "0")}`,
       day_of_month: dayOfMonth, days_in_month: daysInMonth,
-      channel_filter: channelFilter || null,
-      closed_revenue: Math.round(closed), expected_revenue: Math.round(expected),
-      projection_runrate: Math.round(projection), projection_booked: Math.round(closed + expected),
-      by_channel: Object.fromEntries(Object.entries(byChannel).map(([k, v]) => [k, { closed: Math.round(v.closed), expected: Math.round(v.expected) }])),
+      collected_usd: Math.round(collected),
+      projection_runrate_usd: Math.round(projection),
+      unpaid_pipeline: { amount_usd: Math.round(unpaid), count: unpaidCount, note: "agendado aún no cobrado — secundario" },
     };
   }
   if (name === "find_booking") {
@@ -783,6 +816,8 @@ DATOS:
 - dumpsters: label físico (ej. 10YD-01), size_yards, status (available/deployed/maintenance).
 
 TOOLS DE LECTURA: query_bookings, query_revenue, forecast_month, find_booking, where_is_dumpster.
+
+REGLA DE DINERO (crítica): para CUALQUIER pregunta de dinero/ingresos usa query_revenue, que reporta lo COBRADO de verdad (libro conectado a Stripe — la misma verdad que la pantalla Sales). Responde con "cobrado/recibido", nunca con "cerrados/esperados". El unpaid_pipeline (agendado aún no cobrado) menciónalo SOLO si el usuario pregunta explícitamente por lo pendiente o por proyecciones, y déjalo claro como secundario. No inventes proyecciones salvo que te las pidan (usa forecast_month).
 TOOLS DE ESCRITURA: create_booking, update_booking, reschedule_booking, cancel_booking, change_status.
 
 REGLA CRÍTICA — FLUJO DE CONFIRMACIÓN PARA ESCRITURAS:
