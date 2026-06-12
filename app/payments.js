@@ -50,6 +50,7 @@ export default function PaymentsScreen() {
   const [openInvoices, setOpenInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [view, setView] = useState('list'); // list | customers
   const [classifyTx, setClassifyTx] = useState(null); // tx being classified
   const [bookingQuery, setBookingQuery] = useState('');
   const [bookingResults, setBookingResults] = useState([]);
@@ -109,6 +110,22 @@ export default function PaymentsScreen() {
     if (filter === 'refund') return r.category === 'refund' || r.category === 'chargeback';
     return true;
   }), [rows, filter]);
+
+  // Spend grouped by customer, straight from what Stripe already knows —
+  // no booking cross-referencing needed (Cris 2026-06-11).
+  const customers = useMemo(() => {
+    const map = {};
+    for (const r of rows) {
+      const name =
+        r.metadata?.customer_name ||
+        (r.description || '').split('·')[0].trim() ||
+        '(no name)';
+      if (!map[name]) map[name] = { name, total: 0, count: 0 };
+      map[name].total += r.amount_cents || 0;
+      if ((r.amount_cents || 0) > 0) map[name].count += 1;
+    }
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [rows]);
 
   // ── Classify flow ──
   const searchBookings = useCallback(async (q) => {
@@ -254,7 +271,41 @@ export default function PaymentsScreen() {
             </View>
           )}
 
+          {/* View toggle: every payment vs grouped by customer */}
+          <View style={{ flexDirection: 'row', backgroundColor: '#F2F2F2', borderRadius: 10, padding: 3, marginBottom: 10 }}>
+            {[{ k: 'list', l: 'Payments' }, { k: 'customers', l: 'By customer' }].map((t) => (
+              <TouchableOpacity
+                key={t.k}
+                onPress={() => setView(t.k)}
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8, backgroundColor: view === t.k ? '#14213D' : 'transparent' }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '800', color: view === t.k ? '#FFCD11' : '#555' }}>{t.l}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {view === 'customers' && (
+            <>
+              {customers.length === 0 && (
+                <Text style={{ color: '#888', textAlign: 'center', marginTop: 24 }}>No payments this month.</Text>
+              )}
+              {customers.map((c, i) => (
+                <View key={c.name} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
+                  <Text style={{ width: 26, color: '#999', fontWeight: '700', fontSize: 12 }}>{i + 1}</Text>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={{ fontWeight: '700', color: '#1A1A1A', fontSize: 13 }} numberOfLines={1}>{c.name}</Text>
+                    <Text style={{ color: '#888', fontSize: 12 }}>{c.count} payment{c.count === 1 ? '' : 's'}</Text>
+                  </View>
+                  <Text style={{ fontWeight: '800', fontSize: 14, color: c.total < 0 ? '#C00' : '#1A1A1A' }}>
+                    {c.total < 0 ? '-' : ''}{fmt(c.total)}
+                  </Text>
+                </View>
+              ))}
+            </>
+          )}
+
           {/* Filter chips */}
+          {view === 'list' && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
             {FILTERS.map((f) => (
               <TouchableOpacity
@@ -268,14 +319,15 @@ export default function PaymentsScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          )}
 
           {/* Transactions list */}
-          {visible.length === 0 && (
+          {view === 'list' && visible.length === 0 && (
             <Text style={{ color: '#888', textAlign: 'center', marginTop: 24 }}>
               No payments in this view.
             </Text>
           )}
-          {visible.map((r) => {
+          {view === 'list' && visible.map((r) => {
             const bd = badge(r);
             const isNeg = (r.amount_cents || 0) < 0;
             return (
