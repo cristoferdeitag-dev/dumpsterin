@@ -62,6 +62,25 @@ export async function fetchBookings() {
   return (data || []).map(mapBookingFromDB);
 }
 
+// Auto-close: a job whose pickup date passed 3+ days ago can't still be
+// "open" in real life — close it so the boards stay honest without anyone
+// clicking (Cris 2026-06-12). Runs once per app load.
+export async function autoCloseStaleBookings(bookings) {
+  const cutoff = new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10);
+  const stale = (bookings || []).filter(
+    (b) => b.pickupDate && b.pickupDate < cutoff && !['completed', 'cancelled'].includes(b.status)
+  );
+  if (stale.length === 0) return bookings;
+  const ids = stale.map((b) => b.id);
+  const { error } = await supabase.from('bookings').update({ status: 'completed' }).in('id', ids);
+  if (error) {
+    console.error('autoCloseStaleBookings failed:', error);
+    return bookings;
+  }
+  console.log(`Auto-closed ${ids.length} stale booking(s):`, stale.map((b) => b.bookingNumber || b.id).join(', '));
+  return bookings.map((b) => (ids.includes(b.id) ? { ...b, status: 'completed' } : b));
+}
+
 // Mutation helpers throw a clean error message on failure. Callers wrap in
 // try/catch so the UI can show the failure to the user.
 function raise(prefix, error) {

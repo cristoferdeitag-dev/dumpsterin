@@ -50,14 +50,14 @@ function isValidEmail(e) { return EMAIL_REGEX.test((e || '').trim()); }
 function cleanPhoneDigits(s) { return (s || '').replace(/\D/g, ''); }
 
 const STEPS = [
-  { id: 'company', title: 'Empresa', icon: 'business' },
-  { id: 'area', title: 'Zona', icon: 'location' },
-  { id: 'fleet', title: 'Flota', icon: 'cube' },
-  { id: 'services', title: 'Servicios', icon: 'construct' },
-  { id: 'pricing', title: 'Precios', icon: 'cash' },
-  { id: 'policies', title: 'Políticas', icon: 'document-text' },
-  { id: 'team', title: 'Equipo', icon: 'people' },
-  { id: 'summary', title: 'Confirmar', icon: 'checkmark-circle' },
+  { id: 'company', title: 'Company', icon: 'business' },
+  { id: 'area', title: 'Area', icon: 'location' },
+  { id: 'fleet', title: 'Fleet', icon: 'cube' },
+  { id: 'services', title: 'Services', icon: 'construct' },
+  { id: 'pricing', title: 'Pricing', icon: 'cash' },
+  { id: 'policies', title: 'Policies', icon: 'document-text' },
+  { id: 'team', title: 'Team', icon: 'people' },
+  { id: 'summary', title: 'Confirm', icon: 'checkmark-circle' },
 ];
 
 export default function OnboardingScreen() {
@@ -115,25 +115,25 @@ export default function OnboardingScreen() {
 
   const validateStep = () => {
     if (currentStep.id === 'company') {
-      if (!company.name) return 'Ingresa el nombre de la empresa';
-      if (!company.phoneDigits || company.phoneDigits.length !== 10) return 'El teléfono debe tener 10 dígitos';
-      if (!company.email) return 'Ingresa un email';
-      if (!isValidEmail(company.email)) return 'El email no parece válido';
-      if (slugStatus === 'taken') return 'El slug ya está en uso';
+      if (!company.name) return 'Enter your company name';
+      if (!company.phoneDigits || company.phoneDigits.length !== 10) return 'Phone number must be 10 digits';
+      if (!company.email) return 'Enter an email';
+      if (!isValidEmail(company.email)) return 'That email does not look valid';
+      if (slugStatus === 'taken') return 'That slug is already taken';
     }
     if (currentStep.id === 'fleet') {
       const total = Object.values(fleet).reduce((a, b) => a + (+b || 0), 0);
-      if (total === 0) return 'Agrega al menos 1 dumpster';
+      if (total === 0) return 'Add at least 1 dumpster';
     }
     if (currentStep.id === 'services') {
-      if (services.length === 0) return 'Elige al menos 1 servicio';
+      if (services.length === 0) return 'Pick at least 1 service';
     }
     return null;
   };
 
   const next = () => {
     const err = validateStep();
-    if (err) return Alert.alert('Revisa', err);
+    if (err) return Alert.alert('Check this', err);
     // On entering pricing step, initialize defaults
     if (STEPS[stepIdx + 1]?.id === 'pricing') initPricingDefaults();
     setStepIdx(i => Math.min(i + 1, STEPS.length - 1));
@@ -171,7 +171,7 @@ export default function OnboardingScreen() {
     } else {
       // Refresh auth profile so companyId gets loaded
       await refreshProfile();
-      Alert.alert('¡Listo!', `Tu empresa "${result.company.name}" quedó registrada. Bienvenido a Dumpsterin.`, [
+      Alert.alert('All set!', `Your company "${result.company.name}" is registered. Welcome to Dumpsterin.`, [
         { text: 'Ir al dashboard', onPress: () => router.replace('/(tabs)') },
       ]);
     }
@@ -186,7 +186,7 @@ export default function OnboardingScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.stepLabel}>Paso {stepIdx + 1} de {STEPS.length}</Text>
+        <Text style={styles.stepLabel}>Step {stepIdx + 1} of {STEPS.length}</Text>
         <Text style={styles.stepTitle}>{currentStep.title}</Text>
       </View>
 
@@ -248,13 +248,13 @@ export default function OnboardingScreen() {
         {stepIdx > 0 ? (
           <TouchableOpacity style={styles.btnSecondary} onPress={back} disabled={loading}>
             <Ionicons name="arrow-back" size={18} color={C.text} />
-            <Text style={styles.btnSecondaryText}>Atrás</Text>
+            <Text style={styles.btnSecondaryText}>Back</Text>
           </TouchableOpacity>
         ) : <View style={{ width: 100 }} />}
 
         {stepIdx < STEPS.length - 1 ? (
           <TouchableOpacity style={styles.btnPrimary} onPress={next}>
-            <Text style={styles.btnPrimaryText}>Siguiente</Text>
+            <Text style={styles.btnPrimaryText}>Next</Text>
             <Ionicons name="arrow-forward" size={18} color="white" />
           </TouchableOpacity>
         ) : (
@@ -263,7 +263,7 @@ export default function OnboardingScreen() {
               <ActivityIndicator color="white" />
             ) : (
               <>
-                <Text style={styles.btnPrimaryText}>Confirmar</Text>
+                <Text style={styles.btnPrimaryText}>Confirm</Text>
                 <Ionicons name="checkmark" size={18} color="white" />
               </>
             )}
@@ -287,7 +287,7 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
   const handleEmailChange = (email) => {
     setCompany({ ...company, email });
     if (email && !isValidEmail(email)) {
-      setEmailError('Email no válido');
+      setEmailError('Invalid email');
     } else {
       setEmailError(null);
     }
@@ -295,7 +295,7 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
 
   return (
     <View style={{ gap: 14 }}>
-      <Field label="Nombre de la empresa *">
+      <Field label="Company name *">
         <TextInput
           style={styles.input}
           value={company.name}
@@ -305,7 +305,7 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
         />
       </Field>
 
-      <Field label="Slug (identificador único)">
+      <Field label="Slug (unique ID)">
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <TextInput
             style={[styles.input, { flex: 1 }]}
@@ -320,7 +320,7 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
         </View>
       </Field>
 
-      <Field label="Teléfono de la empresa *">
+      <Field label="Company phone *">
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
             style={[styles.input, styles.countryBtn]}
@@ -343,7 +343,7 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
         <Text style={styles.fieldHint}>
           {company.phoneDigits.length === 10
             ? `✓ ${selectedCountry.code} ${company.phoneDigits}`
-            : `${company.phoneDigits.length}/10 dígitos`}
+            : `${company.phoneDigits.length}/10 digits`}
         </Text>
       </Field>
 
@@ -352,7 +352,7 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
           style={[styles.input, emailError && { borderColor: C.danger }]}
           value={company.email}
           onChangeText={handleEmailChange}
-          placeholder="contacto@tuempresa.com"
+          placeholder="contact@yourcompany.com"
           keyboardType="email-address"
           autoCapitalize="none"
           placeholderTextColor={C.textLight}
@@ -360,12 +360,12 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
         {emailError && <Text style={[styles.fieldHint, { color: C.danger }]}>{emailError}</Text>}
       </Field>
 
-      <Field label="Sitio web (opcional)">
+      <Field label="Website (optional)">
         <TextInput
           style={styles.input}
           value={company.website}
           onChangeText={website => setCompany({ ...company, website })}
-          placeholder="tuempresa.com"
+          placeholder="yourcompany.com"
           autoCapitalize="none"
           placeholderTextColor={C.textLight}
         />
@@ -380,7 +380,7 @@ function CompanyStep({ company, setCompany, updateName, checkSlug, slugStatus, e
         <View style={styles.modalBackdrop}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Selecciona país</Text>
+              <Text style={styles.modalTitle}>Select country</Text>
               <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
                 <Ionicons name="close" size={24} color={C.text} />
               </TouchableOpacity>
@@ -413,9 +413,9 @@ function AreaStep({ cities, setCities, zips, setZips }) {
   return (
     <View style={{ gap: 14 }}>
       <Text style={styles.helpText}>
-        Indícanos dónde das servicio. Puedes usar ciudades o códigos postales (uno por línea o separados por comas).
+        Tell us where you operate. Use cities or zip codes (one per line or comma-separated).
       </Text>
-      <Field label="Ciudades">
+      <Field label="Cities">
         <TextInput
           style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
           value={cities}
@@ -425,7 +425,7 @@ function AreaStep({ cities, setCities, zips, setZips }) {
           placeholderTextColor={C.textLight}
         />
       </Field>
-      <Field label="Zip codes (opcional)">
+      <Field label="Zip codes (optional)">
         <TextInput
           style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
           value={zips}
@@ -445,14 +445,14 @@ function FleetStep({ fleet, setFleet }) {
   return (
     <View style={{ gap: 12 }}>
       <Text style={styles.helpText}>
-        ¿Cuántos dumpsters tienes de cada tamaño?
+        How many dumpsters do you have of each size?
       </Text>
       <View style={styles.fleetTotal}>
         <Text style={styles.fleetTotalText}>Total: {total} dumpsters</Text>
       </View>
       {sizes.map(size => (
         <View key={size} style={styles.fleetRow}>
-          <Text style={styles.fleetLabel}>{size} yardas</Text>
+          <Text style={styles.fleetLabel}>{size} yard</Text>
           <View style={styles.stepper}>
             <TouchableOpacity style={styles.stepperBtn} onPress={() => setFleet({ ...fleet, [size]: Math.max(0, (fleet[size] || 0) - 1) })}>
               <Ionicons name="remove" size={20} color={C.text} />
@@ -474,7 +474,7 @@ function ServicesStep({ services, setServices }) {
   };
   return (
     <View style={{ gap: 10 }}>
-      <Text style={styles.helpText}>Selecciona todos los tipos de residuos que manejas.</Text>
+      <Text style={styles.helpText}>Select every material type you handle.</Text>
       {SERVICE_OPTIONS.map(svc => (
         <TouchableOpacity key={svc} style={[styles.serviceRow, services.includes(svc) && styles.serviceRowActive]} onPress={() => toggle(svc)}>
           <Ionicons
@@ -494,7 +494,7 @@ function PricingStep({ services, fleet, pricing, setPricing }) {
   return (
     <View style={{ gap: 12 }}>
       <Text style={styles.helpText}>
-        Precio base por servicio y tamaño. Pre-llenamos con sugeridos del mercado; puedes editar.
+        Base price per service and size. Pre-filled with market suggestions; edit freely.
       </Text>
       {services.map(svc => (
         <View key={svc} style={styles.pricingBlock}>
@@ -525,20 +525,20 @@ function PoliciesStep({ policies, setPolicies }) {
   const upd = (k, v) => setPolicies({ ...policies, [k]: v });
   return (
     <View style={{ gap: 12 }}>
-      <Text style={styles.helpText}>Términos estándar de tu renta (puedes editar cada caso después).</Text>
+      <Text style={styles.helpText}>Your standard rental terms (you can adjust per booking later).</Text>
 
-      <PolicyRow label="Duración del rental (días)" value={String(policies.rentalDays)} onChange={v => upd('rentalDays', parseInt(v) || 0)} />
-      <PolicyRow label="Día extra ($)" value={String(policies.extraDayRate)} onChange={v => upd('extraDayRate', parseFloat(v) || 0)} />
-      <PolicyRow label="Sobrepeso ($/ton)" value={String(policies.overweightPerTon)} onChange={v => upd('overweightPerTon', parseFloat(v) || 0)} />
-      <PolicyRow label="Fee colchón ($)" value={String(policies.mattressFee)} onChange={v => upd('mattressFee', parseFloat(v) || 0)} />
-      <PolicyRow label="Fee appliance ($)" value={String(policies.applianceFee)} onChange={v => upd('applianceFee', parseFloat(v) || 0)} />
-      <PolicyRow label="Fee llanta ($)" value={String(policies.tireFee)} onChange={v => upd('tireFee', parseFloat(v) || 0)} />
-      <PolicyRow label="Fee electrónicos ($)" value={String(policies.electronicsFee)} onChange={v => upd('electronicsFee', parseFloat(v) || 0)} />
-      <PolicyRow label="Cargo cancelación ($)" value={String(policies.cancellationFee)} onChange={v => upd('cancellationFee', parseFloat(v) || 0)} />
-      <PolicyRow label="Aviso cancelación (hrs)" value={String(policies.cancellationNoticeHours)} onChange={v => upd('cancellationNoticeHours', parseInt(v) || 0)} />
+      <PolicyRow label="Rental length (days)" value={String(policies.rentalDays)} onChange={v => upd('rentalDays', parseInt(v) || 0)} />
+      <PolicyRow label="Extra day ($)" value={String(policies.extraDayRate)} onChange={v => upd('extraDayRate', parseFloat(v) || 0)} />
+      <PolicyRow label="Overweight ($/ton)" value={String(policies.overweightPerTon)} onChange={v => upd('overweightPerTon', parseFloat(v) || 0)} />
+      <PolicyRow label="Mattress fee ($)" value={String(policies.mattressFee)} onChange={v => upd('mattressFee', parseFloat(v) || 0)} />
+      <PolicyRow label="Appliance fee ($)" value={String(policies.applianceFee)} onChange={v => upd('applianceFee', parseFloat(v) || 0)} />
+      <PolicyRow label="Tire fee ($)" value={String(policies.tireFee)} onChange={v => upd('tireFee', parseFloat(v) || 0)} />
+      <PolicyRow label="Electronics fee ($)" value={String(policies.electronicsFee)} onChange={v => upd('electronicsFee', parseFloat(v) || 0)} />
+      <PolicyRow label="Cancellation fee ($)" value={String(policies.cancellationFee)} onChange={v => upd('cancellationFee', parseFloat(v) || 0)} />
+      <PolicyRow label="Cancellation notice (hrs)" value={String(policies.cancellationNoticeHours)} onChange={v => upd('cancellationNoticeHours', parseInt(v) || 0)} />
 
       <View style={styles.switchRow}>
-        <Text style={styles.fieldLabel}>Entrega same-day disponible</Text>
+        <Text style={styles.fieldLabel}>Same-day delivery available</Text>
         <Switch value={policies.sameDay} onValueChange={v => upd('sameDay', v)} trackColor={{ true: C.primary }} />
       </View>
     </View>
@@ -556,7 +556,7 @@ function TeamStep({ drivers, setDrivers }) {
 
   return (
     <View style={{ gap: 12 }}>
-      <Text style={styles.helpText}>Agrega a tus drivers (puedes saltar este paso y agregar después).</Text>
+      <Text style={styles.helpText}>Add your drivers (you can skip this and add them later).</Text>
       {drivers.map((d, idx) => (
         <View key={idx} style={styles.driverCard}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -569,14 +569,14 @@ function TeamStep({ drivers, setDrivers }) {
           </View>
           <TextInput
             style={styles.input}
-            placeholder="Nombre"
+            placeholder="Name"
             placeholderTextColor={C.textLight}
             value={d.name}
             onChangeText={v => updateDriver(idx, 'name', v)}
           />
           <TextInput
             style={styles.input}
-            placeholder="Teléfono"
+            placeholder="Phone"
             placeholderTextColor={C.textLight}
             keyboardType="phone-pad"
             value={d.phone}
@@ -584,7 +584,7 @@ function TeamStep({ drivers, setDrivers }) {
           />
           <TextInput
             style={styles.input}
-            placeholder="Email (opcional)"
+            placeholder="Email (optional)"
             placeholderTextColor={C.textLight}
             keyboardType="email-address"
             autoCapitalize="none"
@@ -595,7 +595,7 @@ function TeamStep({ drivers, setDrivers }) {
       ))}
       <TouchableOpacity style={styles.addDriverBtn} onPress={addDriver}>
         <Ionicons name="add-circle-outline" size={22} color={C.primaryDark} />
-        <Text style={{ color: C.primaryDark, fontWeight: '600' }}>Agregar otro driver</Text>
+        <Text style={{ color: C.primaryDark, fontWeight: '600' }}>Add another driver</Text>
       </TouchableOpacity>
     </View>
   );
@@ -605,29 +605,29 @@ function SummaryStep({ company, fleet, services, drivers, policies }) {
   const total = Object.values(fleet).reduce((a, b) => a + (+b || 0), 0);
   return (
     <View style={{ gap: 12 }}>
-      <Text style={styles.helpText}>Revisa tu setup antes de confirmar.</Text>
-      <SummaryCard title={company.name || 'Tu empresa'}>
-        <SumLine label="Teléfono" value={company.phone} />
+      <Text style={styles.helpText}>Review your setup before confirming.</Text>
+      <SummaryCard title={company.name || 'Your company'}>
+        <SumLine label="Phone" value={company.phone} />
         <SumLine label="Email" value={company.email} />
-        <SumLine label="Sitio web" value={company.website || '(sin website)'} />
+        <SumLine label="Website" value={company.website || '(no website)'} />
       </SummaryCard>
-      <SummaryCard title={`Flota: ${total} dumpsters`}>
+      <SummaryCard title={`Fleet: ${total} dumpsters`}>
         {Object.entries(fleet).filter(([_, v]) => v > 0).map(([s, v]) => (
-          <SumLine key={s} label={`${s} yardas`} value={`${v} unidades`} />
+          <SumLine key={s} label={`${s} yard`} value={`${v} units`} />
         ))}
       </SummaryCard>
-      <SummaryCard title={`Servicios (${services.length})`}>
-        <Text style={{ color: C.textMuted }}>{services.join(', ') || '(ninguno)'}</Text>
+      <SummaryCard title={`Services (${services.length})`}>
+        <Text style={{ color: C.textMuted }}>{services.join(', ') || '(none)'}</Text>
       </SummaryCard>
-      <SummaryCard title="Políticas">
-        <SumLine label="Duración" value={`${policies.rentalDays} días`} />
-        <SumLine label="Día extra" value={`$${policies.extraDayRate}`} />
-        <SumLine label="Sobrepeso" value={`$${policies.overweightPerTon}/ton`} />
-        <SumLine label="Same-day" value={policies.sameDay ? 'Sí' : 'No'} />
+      <SummaryCard title="Policies">
+        <SumLine label="Length" value={`${policies.rentalDays} days`} />
+        <SumLine label="Extra day" value={`$${policies.extraDayRate}`} />
+        <SumLine label="Overweight" value={`$${policies.overweightPerTon}/ton`} />
+        <SumLine label="Same-day" value={policies.sameDay ? 'Yes' : 'No'} />
       </SummaryCard>
-      <SummaryCard title={`Equipo: ${drivers.length} drivers`}>
+      <SummaryCard title={`Team: ${drivers.length} drivers`}>
         {drivers.length === 0 ? (
-          <Text style={{ color: C.textMuted }}>(Puedes agregar drivers después)</Text>
+          <Text style={{ color: C.textMuted }}>(You can add drivers later)</Text>
         ) : (
           drivers.map((d, i) => <SumLine key={i} label={d.name} value={d.phone} />)
         )}

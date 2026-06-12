@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../src/context/AppContext';
 import { useAuth } from '../src/context/AuthContext';
 import { suggestRoute, driveMinutes } from '../src/lib/routeOptimizer';
+import { fetchMarketplaceOrders } from '../src/lib/marketplaceApi';
+
+// BD marketplace order → same job shape the board uses. They live in BD's
+// system, so tapping one routes to the Marketplace screen (its lifecycle
+// buttons), not the local booking detail.
+const BD_STATUS = { paid: 'scheduled', dispatched: 'in_transit', delivered: 'delivered', picking_up: 'ready_for_pickup' };
+function bdToJob(o) {
+  return {
+    id: `bd-${o.id}`,
+    source: 'bd',
+    bdId: o.id,
+    customerName: o.customer_name || 'BD customer',
+    phone: o.customer_phone || '',
+    deliveryAddress: [o.street, o.city, o.zip].filter(Boolean).join(', '),
+    dumpsterSize: o.size,
+    deliveryDate: o.delivery_date,
+    pickupDate: o.pickup_date,
+    deliveryWindow: o.delivery_slot || o.delivery_window || 'Anytime',
+    pickupWindow: null,
+    status: BD_STATUS[o.status] || o.status,
+    needsAccept: o.provider_confirmation_status === 'pending',
+  };
+}
 
 // TODAY — the whole day's work on one screen (Cris 2026-06-12: "que sea muy
 // visible el calendario del trabajo del día"). Deliveries and pickups for
@@ -48,11 +71,13 @@ function openMaps(address) {
 }
 
 function JobCard({ job, kind, router }) {
-  const chip = statusChip(job.status);
+  const chip = job.needsAccept
+    ? { bg: '#FDECEA', fg: '#B3261E', label: 'Accept now!' }
+    : statusChip(job.status);
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/booking/${job.id}`)}
-      style={{ backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E8E8E8', padding: 12, marginBottom: 8 }}
+      onPress={() => router.push(job.source === 'bd' ? '/marketplace' : `/booking/${job.id}`)}
+      style={{ backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: job.needsAccept ? '#B3261E' : '#E8E8E8', padding: 12, marginBottom: 8 }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
         <View style={{ backgroundColor: kind === 'delivery' ? '#14213D' : '#B9770E', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginRight: 8 }}>
@@ -60,6 +85,11 @@ function JobCard({ job, kind, router }) {
             {kind === 'delivery' ? 'DROP' : 'PICKUP'} · {job.dumpsterSize || '?'}
           </Text>
         </View>
+        {job.source === 'bd' && (
+          <View style={{ backgroundColor: '#F59E0B', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, marginRight: 8 }}>
+            <Text style={{ color: '#14213D', fontSize: 10, fontWeight: '800' }}>BD</Text>
+          </View>
+        )}
         <Text style={{ fontWeight: '800', fontSize: 13, color: '#1A1A1A', flex: 1 }} numberOfLines={1}>
           {(kind === 'delivery' ? job.deliveryWindow : job.pickupWindow || job.deliveryWindow) || 'Anytime'} · {job.customerName}
         </Text>
@@ -103,6 +133,11 @@ export default function TodayScreen() {
   const { state } = useApp();
   const { profile } = useAuth();
   const [route, setRoute] = useState(null);
+  const [bdOrders, setBdOrders] = useState([]);
+
+  useEffect(() => {
+    fetchMarketplaceOrders().then((rows) => setBdOrders((rows || []).map(bdToJob))).catch(() => {});
+  }, []);
 
   const today = new Date().toISOString().slice(0, 10);
   const niceDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -110,17 +145,18 @@ export default function TodayScreen() {
   const { deliveries, pickups, doneCount } = useMemo(() => {
     const live = (b) => !['cancelled'].includes(b.status);
     const done = (b) => ['completed', 'picked_up'].includes(b.status);
-    const del = state.bookings
+    const all = [...state.bookings, ...bdOrders];
+    const del = all
       .filter((b) => live(b) && b.deliveryDate === today)
       .sort((a, b2) => windowSortKey(a.deliveryWindow) - windowSortKey(b2.deliveryWindow));
-    const pick = state.bookings
+    const pick = all
       .filter((b) => live(b) && b.pickupDate === today)
       .sort((a, b2) => windowSortKey(a.pickupWindow || a.deliveryWindow) - windowSortKey(b2.pickupWindow || b2.deliveryWindow));
     const doneCount2 =
       del.filter((b) => ['on_site', 'delivered', 'completed'].includes(b.status)).length +
       pick.filter(done).length;
     return { deliveries: del, pickups: pick, doneCount: doneCount2 };
-  }, [state.bookings, today]);
+  }, [state.bookings, bdOrders, today]);
 
   const locations = profile?.companies?.settings?.locations || null;
 

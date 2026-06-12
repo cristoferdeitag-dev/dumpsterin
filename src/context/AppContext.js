@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
-import { fetchBookings, fetchDumpsters, fetchDrivers } from '../lib/supabase';
+import { fetchBookings, fetchDumpsters, fetchDrivers, autoCloseStaleBookings } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
 const AppContext = createContext();
@@ -92,11 +92,12 @@ export function AppProvider({ children }) {
 
     async function loadFromSupabase() {
       try {
-        const [bookings, dumpsters, drivers] = await Promise.all([
+        let [bookings, dumpsters, drivers] = await Promise.all([
           fetchBookings(),
           fetchDumpsters(),
           fetchDrivers(),
         ]);
+        bookings = await autoCloseStaleBookings(bookings || []);
         dispatch({
           type: 'SET_DATA',
           payload: {
