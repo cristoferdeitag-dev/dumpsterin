@@ -83,6 +83,18 @@ export default function HomeScreen() {
   // 2026-06-11: the headline number must be cash in, not service delivered.
   // MoM compares against the same day-range of the previous month.
   const [ledger, setLedger] = useState({ collected: null, change: null, card: 0, oob: 0, refunds: 0, review: 0 });
+  // Marketplace orders waiting for accept/reject — surfaced as a red badge.
+  const [mkPending, setMkPending] = useState(0);
+  useEffect(() => {
+    (async () => {
+      const { count } = await supabase
+        .from('bd_bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('provider_confirmation_status', 'pending')
+        .in('status', ['paid']);
+      setMkPending(count || 0);
+    })();
+  }, [bookings]);
   useEffect(() => {
     (async () => {
       const today = new Date().toISOString().slice(0, 10);
@@ -250,6 +262,26 @@ export default function HomeScreen() {
           >
             <Ionicons name="card-outline" size={16} color="#1A1A1A" />
             <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>Payments</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/marketplace')}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 9999,
+              backgroundColor: mkPending > 0 ? '#14213D' : '#F7F7F7',
+              borderWidth: 1,
+              borderColor: mkPending > 0 ? '#14213D' : '#E8E8E8',
+              marginLeft: 6,
+            }}
+          >
+            <Ionicons name="storefront-outline" size={16} color={mkPending > 0 ? '#FFCD11' : '#1A1A1A'} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: mkPending > 0 ? '#FFCD11' : '#1A1A1A' }}>
+              Marketplace{mkPending > 0 ? ` (${mkPending})` : ''}
+            </Text>
           </TouchableOpacity>
         </View>
 
