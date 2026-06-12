@@ -115,6 +115,75 @@ async function findBookingByNumber(
   return rows[0] || null;
 }
 
+// Paid provider quote with no booking yet → schedule the service
+// automatically (Cris 2026-06-12: "cuando se paga se debería agendar en
+// automático"). Returns the created booking id, or null.
+async function createBookingFromQuote(
+  invoice: Record<string, unknown>,
+  md: Record<string, string>,
+  amountPaid: number,
+  paidAt: string
+): Promise<{ id: string; booking_number: string } | null> {
+  const sizeNum = parseInt((md.size || "").replace(/\D/g, ""), 10);
+  const dumpsterSize = [10, 20, 30].includes(sizeNum) ? sizeNum : 20;
+  const serviceMap: Record<string, string> = {
+    general_debris: "General Debris",
+    clean_soil: "Clean Soil",
+    clean_concrete: "Clean Concrete",
+    clean_asphalt: "Clean Asphalt",
+    mixed_materials: "Mixed Materials",
+    bricks: "Bricks",
+    roofing: "General Debris",
+  };
+  const serviceType = serviceMap[md.service_type || ""] || "General Debris";
+  // No requested date on the quote → tentatively next day; the team adjusts.
+  const fallbackDate = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const scheduledDate = /^\d{4}-\d{2}-\d{2}/.test(md.delivery_date || "")
+    ? (md.delivery_date as string).slice(0, 10)
+    : fallbackDate;
+  const bookingNumber = `Q-${(invoice.number as string) || (invoice.id as string).slice(-8)}`;
+
+  const row: Record<string, unknown> = {
+    booking_number: bookingNumber,
+    company_id: md.provider_id || TP_COMPANY_ID,
+    customer_name: (invoice.customer_name as string) || (invoice.customer_email as string) || "Quote customer",
+    customer_email: (invoice.customer_email as string) || null,
+    customer_phone: md.customer_phone || null,
+    dumpster_size: dumpsterSize,
+    service_type: serviceType,
+    scheduled_date: scheduledDate,
+    delivery_window: md.delivery_window || null,
+    pickup_date: /^\d{4}-\d{2}-\d{2}/.test(md.pickup_date || "") ? (md.pickup_date as string).slice(0, 10) : null,
+    status: "scheduled",
+    source: "quote",
+    base_price: amountPaid,
+    payment_status: "paid",
+    paid_amount: amountPaid,
+    paid_at: paidAt,
+    stripe_invoice_id: invoice.id as string,
+    notes: md.delivery_date
+      ? `Auto-created from paid quote ${bookingNumber}.`
+      : `Auto-created from paid quote ${bookingNumber}. DATE IS TENTATIVE — quote had no requested date, please confirm with the customer.`,
+  };
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, {
+    method: "POST",
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify([row]),
+  });
+  if (!res.ok) {
+    console.error("quote booking create failed:", res.status, await res.text());
+    return null;
+  }
+  const rows = (await res.json()) as Array<{ id: string; booking_number: string }>;
+  return rows[0] || null;
+}
+
 async function updateBookingPayment(
   bookingId: string,
   payload: Record<string, unknown>
@@ -153,7 +222,25 @@ async function handleInvoicePaid(
   const invoiceId = invoice.id as string;
   const customerName = (invoice.customer_name as string) || "(sin nombre)";
 
-  const booking = bookingNumber ? await findBookingByNumber(bookingNumber) : null;
+  let booking = bookingNumber ? await findBookingByNumber(bookingNumber) : null;
+
+  // Paid quote without an existing booking → schedule it automatically.
+  let autoCreated: { id: string; booking_number: string } | null = null;
+  if (!booking && md.product === "provider_invoice") {
+    autoCreated = await createBookingFromQuote(invoice, md, amountPaid, paidAt);
+    if (autoCreated) {
+      booking = { id: autoCreated.id, total: amountPaid };
+      await notifyTelegram(
+        `📅 Quote pagada → servicio agendado automáticamente\n\n` +
+          `Reserva: ${autoCreated.booking_number}\n` +
+          `Cliente: ${customerName}\n` +
+          `Monto: $${amountPaid.toFixed(2)}\n` +
+          (md.delivery_date
+            ? `Entrega solicitada: ${md.delivery_date}`
+            : `⚠️ La quote no traía fecha — quedó agendada TENTATIVA para mañana, confirmar con el cliente.`)
+      );
+    }
+  }
 
   const oobMethod = md.oob_method === "cash" || md.oob_method === "zelle" ? md.oob_method : "other";
 
