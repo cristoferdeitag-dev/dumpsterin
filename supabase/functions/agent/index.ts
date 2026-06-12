@@ -193,6 +193,35 @@ const WRITE_TOOL_DEFS: Array<{ name: string; description: string; props: Record<
     },
     required: ["booking_number", "new_status"],
   },
+  {
+    name: "create_quote",
+    description:
+      "Send a quote (a branded Stripe invoice with a pay-by-card link) to a customer by email. The customer pays online; when paid, the booking is created automatically. Use draft→confirm flow.",
+    props: {
+      customer_name: { type: "string" },
+      customer_email: { type: "string" },
+      customer_phone: { type: "string" },
+      amount_usd: { type: "number", description: "Total for the rental line, in dollars." },
+      size: { type: "string", description: "10yd, 20yd or 30yd. Default 10yd." },
+      service_type: { type: "string", description: "general_debris | clean_soil | clean_concrete | clean_asphalt | mixed_materials | bricks" },
+      delivery_date: { type: "string", description: "Requested delivery YYYY-MM-DD (optional but recommended)." },
+      pickup_date: { type: "string" },
+      delivery_window: { type: "string" },
+      notes: { type: "string", description: "Shown on the invoice." },
+      due_days: { type: "number", description: "Days until the quote expires. Default 14." },
+    },
+    required: ["customer_name", "customer_email", "amount_usd"],
+  },
+  {
+    name: "cancel_quote",
+    description:
+      "Cancel (void) an OPEN quote that hasn't been paid, by its invoice number (e.g. ABCD1234-0001). A paid quote can't be cancelled — that's a refund, handled by a human. To CHANGE a quote: cancel it and create a new one. Use draft→confirm flow.",
+    props: {
+      invoice_number: { type: "string" },
+      reason: { type: "string" },
+    },
+    required: ["invoice_number"],
+  },
 ];
 
 function buildWriteToolSchemas() {
@@ -446,6 +475,14 @@ function summarize(action: string, args: Record<string, unknown>): string {
     case "change_status": {
       const a = args as any;
       return `Change status of ${a.booking_number} → ${a.new_status}.`;
+    }
+    case "create_quote": {
+      const a = args as any;
+      return `Send quote to ${a.customer_name} <${a.customer_email}> — ${a.size || "10yd"} ${a.service_type || "general_debris"} for $${a.amount_usd}${a.delivery_date ? `, delivery ${a.delivery_date}` : ""}. Expires in ${a.due_days || 14} days.`;
+    }
+    case "cancel_quote": {
+      const a = args as any;
+      return `Void open quote ${a.invoice_number}${a.reason ? ` — reason: ${a.reason}` : ""}.`;
     }
   }
   return action;
@@ -709,6 +746,65 @@ async function executeWrite(
     await auditLog({ company_id: companyId, user_id: userId, user_name: userName, action, payload: args, result: updated, booking_id: existing.id });
     return { ok: true, booking_number: updated.booking_number, status: dbStatus };
   }
+  if (action === "create_quote") {
+    const a = args as any;
+    const res = await fetch("https://bookingdumpsters.com/api/quotes/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Service-to-service call: BD recognizes the shared service key.
+        Authorization: `Bearer ${SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        provider_id: companyId,
+        customer: { name: a.customer_name, email: a.customer_email, phone: a.customer_phone || undefined },
+        items: [{ description: "Dumpster rental", amount_cents: Math.round(Number(a.amount_usd) * 100) }],
+        size: a.size || "10yd",
+        service_type: a.service_type || undefined,
+        delivery_date: a.delivery_date || undefined,
+        pickup_date: a.pickup_date || undefined,
+        delivery_window: a.delivery_window || undefined,
+        notes: a.notes || undefined,
+        due_days: a.due_days || undefined,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`quote create failed ${res.status}: ${data.error || ""}`);
+    await auditLog({ company_id: companyId, user_id: userId, user_name: userName, action, payload: args, result: data, booking_id: null });
+    return {
+      ok: true,
+      invoice_number: data.invoice_number,
+      amount_due_usd: Math.round((data.amount_due_cents || 0) / 100),
+      sent_to: a.customer_email,
+      note: "Quote emailed. When the customer pays, the booking is created and scheduled automatically.",
+    };
+  }
+  if (action === "cancel_quote") {
+    const a = args as any;
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY_TP") || "";
+    if (!stripeKey) throw new Error("Stripe key not configured");
+    const wanted = String(a.invoice_number).trim().toUpperCase();
+    const listRes = await fetch("https://api.stripe.com/v1/invoices?status=open&limit=100", {
+      headers: { Authorization: `Bearer ${stripeKey}` },
+    });
+    const list = (await listRes.json()) as { data?: Array<Record<string, unknown>> };
+    const match = (list.data || []).find(
+      (inv) => String(inv.number || "").toUpperCase() === wanted
+    );
+    if (!match) {
+      throw new Error(
+        `No OPEN invoice found with number ${wanted}. It may already be paid (a paid quote needs a refund, not a cancel) or the number is wrong.`
+      );
+    }
+    const voidRes = await fetch(`https://api.stripe.com/v1/invoices/${match.id}/void`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${stripeKey}` },
+    });
+    const voided = (await voidRes.json()) as Record<string, unknown>;
+    if (!voidRes.ok) throw new Error(`void failed: ${(voided as any)?.error?.message || voidRes.status}`);
+    await auditLog({ company_id: companyId, user_id: userId, user_name: userName, action, payload: args, result: { id: match.id, status: voided.status }, booking_id: null });
+    return { ok: true, invoice_number: wanted, status: "voided", note: "The customer can no longer pay this quote." };
+  }
   throw new Error(`Unknown write action: ${action}`);
 }
 
@@ -818,7 +914,9 @@ DATOS:
 TOOLS DE LECTURA: query_bookings, query_revenue, forecast_month, find_booking, where_is_dumpster.
 
 REGLA DE DINERO (crítica): para CUALQUIER pregunta de dinero/ingresos usa query_revenue, que reporta lo COBRADO de verdad (libro conectado a Stripe — la misma verdad que la pantalla Sales). Responde con "cobrado/recibido", nunca con "cerrados/esperados". El unpaid_pipeline (agendado aún no cobrado) menciónalo SOLO si el usuario pregunta explícitamente por lo pendiente o por proyecciones, y déjalo claro como secundario. No inventes proyecciones salvo que te las pidan (usa forecast_month).
-TOOLS DE ESCRITURA: create_booking, update_booking, reschedule_booking, cancel_booking, change_status.
+TOOLS DE ESCRITURA: create_booking, update_booking, reschedule_booking, cancel_booking, change_status, create_quote, cancel_quote.
+
+QUOTES: create_quote manda una cotización por email con link de pago (factura con la marca del provider); al pagarse, la reserva se agenda sola. cancel_quote anula una quote ABIERTA por su número de invoice; una pagada NO se puede anular (eso es un reembolso → humano). Para MODIFICAR una quote: anula la vieja y crea una nueva. Mismo flujo draft→confirmación que todo lo demás.
 
 REGLA CRÍTICA — FLUJO DE CONFIRMACIÓN PARA ESCRITURAS:
 1. PRIMER paso: llama el tool de escritura SIN confirmation_token (omítelo). El tool te devolverá un summary y un confirmation_token.
