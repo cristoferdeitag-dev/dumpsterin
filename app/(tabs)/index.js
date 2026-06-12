@@ -210,8 +210,9 @@ export default function HomeScreen() {
         contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={{ marginBottom: 32, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        {/* Header — chips wrap below the title so nothing falls off-screen
+            on phones (Marketplace was invisible on mobile). */}
+        <View style={{ marginBottom: 24, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', rowGap: 10 }}>
           <View>
             <Text style={{
               color: '#1A1A1A',
