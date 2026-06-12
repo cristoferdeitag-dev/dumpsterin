@@ -13,21 +13,32 @@ export function AuthProvider({ children }) {
     let isMounted = true;
 
     async function init() {
-      const { data } = await supabase.auth.getSession();
-      if (!isMounted) return;
-      setSession(data.session);
-      if (data.session) {
-        await loadProfile(data.session.user.id);
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        setSession(data.session);
+        if (data.session) {
+          await loadProfile(data.session.user.id);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
     }
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    // IMPORTANT: never await a supabase query inside onAuthStateChange —
+    // supabase-js holds its auth lock while emitting, and a DB request needs
+    // that same lock to attach the token. On a page refresh with a stored
+    // session this deadlocked the whole app on the splash spinner. Deferring
+    // with setTimeout(0) runs the query after the lock is released.
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!isMounted) return;
       setSession(newSession);
+      setLoading(false);
       if (newSession) {
-        await loadProfile(newSession.user.id);
+        setTimeout(() => {
+          if (isMounted) loadProfile(newSession.user.id);
+        }, 0);
       } else {
         setProfile(null);
       }
