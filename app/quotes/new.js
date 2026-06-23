@@ -1,7 +1,8 @@
 // Quote Generator — dedicated screen, ported from Stitch design.
-// Provider creates an invoice/quote that goes to ONE of their customers
-// (not a marketplace booking). Posts to BD's /api/quotes/create which
-// builds the Stripe Invoice inside the provider's Connect account.
+// Provider creates a quote that goes to ONE of their customers (not a
+// marketplace booking). Posts to BD's /api/quotes/link, which returns a
+// link to OUR branded customer page where the customer accepts terms and
+// pays — instead of finalizing/emailing a Stripe-hosted invoice.
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -17,12 +18,14 @@ import {
   Switch,
   Modal,
   FlatList,
+  Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../src/context/AppContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { searchCustomers, createCustomer } from '../../src/lib/customersApi';
+import { DEFAULT_PRICING, fetchProviderPricing } from '../../src/data/pricingDefaults';
 
 const C = {
   primary: '#FFCD11',
@@ -36,24 +39,36 @@ const C = {
   danger: '#C00',
 };
 
-const CATALOG_DUMPSTERS = [
-  { key: '10yd', label: '10 Yard Dumpster', desc: '1 ton weight limit', price: 599 },
-  { key: '20yd', label: '20 Yard Dumpster', desc: '2 tons weight limit', price: 749 },
-  { key: '30yd', label: '30 Yard Dumpster', desc: '3 tons weight limit', price: 799 },
-];
+// Build the screen's dumpster/item catalogs from a provider pricing config.
+// Keeps the catalog shape the screen consumes downstream ({ key, label,
+// desc, price }) so addItem/render/submit keep working unchanged.
+function dumpstersFromConfig(config) {
+  return (config?.sizes || []).map((s) => {
+    const desc = [s.weight ? `${s.weight} weight limit` : null, s.days ? `${s.days}-day rental` : null]
+      .filter(Boolean)
+      .join(' · ');
+    return { key: s.key, label: s.label, desc, price: Number(s.price) || 0 };
+  });
+}
 
-const CATALOG_ITEMS = [
-  { key: 'tire', label: 'Tire', price: 30 },
-  { key: 'mattress', label: 'Mattress', price: 40 },
-  { key: 'appliance_small', label: 'Appliance (small)', price: 50 },
-  { key: 'appliance_large', label: 'Appliance (large)', price: 80 },
-  { key: 'electronic_small', label: 'Electronic (small)', price: 25 },
-  { key: 'electronic_large', label: 'Electronic (large)', price: 40 },
-];
+function itemsFromConfig(config) {
+  return (config?.items || []).map((i) => ({
+    key: i.key,
+    label: i.label,
+    price: Number(i.price) || 0,
+  }));
+}
 
 export default function NewQuoteScreen() {
   const router = useRouter();
   const { companyId } = useAuth();
+
+  // Provider pricing config — drives the Add Item catalogs. Starts as
+  // DEFAULT_PRICING so the UI renders before the fetch resolves, then loads
+  // the provider's saved config (set in Settings → Pricing).
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const catalogDumpsters = useMemo(() => dumpstersFromConfig(pricing), [pricing]);
+  const catalogItems = useMemo(() => itemsFromConfig(pricing), [pricing]);
 
   const [customer, setCustomer] = useState(null);              // selected customer object or null
   const [customerSearch, setCustomerSearch] = useState('');
@@ -76,6 +91,17 @@ export default function NewQuoteScreen() {
   const [sendSMS, setSendSMS] = useState(false);
   const [daysUntilDue, setDaysUntilDue] = useState(14);
   const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);                   // { url, token, total_cents } after a successful link create
+
+  // Load provider pricing on mount (falls back to DEFAULT_PRICING on error).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const config = await fetchProviderPricing(companyId);
+      if (alive) setPricing(config);
+    })();
+    return () => { alive = false; };
+  }, [companyId]);
 
   // Search debounce
   useEffect(() => {
@@ -133,6 +159,23 @@ export default function NewQuoteScreen() {
     }
   }
 
+  // Build the customer-facing terms list from the loaded pricing config.
+  function buildTerms() {
+    return [
+      `Extra days: $${pricing.extraDay}/day`,
+      `Overweight: $${pricing.overweight} per extra ton`,
+      `24h notice required — $${pricing.cancelFee} cancellation fee`,
+      'Delivery, pickup & disposal included',
+    ];
+  }
+
+  // The selected dumpster (first dumpster catalog item in the list, if any).
+  // Its label populates the `size` field on the quote link.
+  function selectedDumpster() {
+    const keys = new Set(catalogDumpsters.map((d) => d.key));
+    return items.find((it) => keys.has(it.key)) || null;
+  }
+
   async function handleSend() {
     if (!customer) return Alert.alert('Required', 'Pick or create a customer first.');
     if (items.length === 0) return Alert.alert('Required', 'Add at least one item.');
@@ -140,37 +183,48 @@ export default function NewQuoteScreen() {
 
     setSending(true);
     try {
+      const dumpster = selectedDumpster();
       const payload = {
         provider_id: companyId,
         customer: {
           name: customer.full_name,
-          email: customer.email,
-          phone: customer.phone,
+          email: customer.email || undefined,   // optional now — no Stripe invoice created
+          phone: customer.phone || undefined,
         },
         items: items.map((it) => ({
-          description: `${it.label}${it.qty > 1 ? ` x${it.qty}` : ''}`,
+          label: `${it.label}${it.qty > 1 ? ` x${it.qty}` : ''}`,
           amount_cents: Math.round(it.price * 100),
-          quantity: it.qty || 1,
+          qty: it.qty || 1,
         })),
-        due_days: daysUntilDue,
+        terms: buildTerms(),
         notes: notes.trim() || undefined,
       };
-      const res = await fetch('https://bookingdumpsters.com/api/quotes/create', {
+      if (dumpster) payload.size = dumpster.label;
+      const res = await fetch('https://bookingdumpsters.com/api/quotes/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Quote API returned an error.');
-      Alert.alert(
-        'Quote sent ✓',
-        `Invoice ${data.invoice_number || data.invoice_id} sent to ${customer.email}.\nAmount: $${(data.amount_due_cents / 100).toFixed(2)}`,
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      if (!data.url) throw new Error('The quote was created but no link was returned.');
+      setResult(data);
     } catch (e) {
-      Alert.alert('Could not send quote', String(e.message || e));
+      Alert.alert('Could not create quote link', String(e.message || e));
     } finally {
       setSending(false);
+    }
+  }
+
+  // Copy / share the customer link. expo-clipboard isn't a dependency and
+  // RN 0.81 dropped the core Clipboard module, so both actions route through
+  // the OS share sheet (which offers "Copy" among its options).
+  async function handleShareLink() {
+    if (!result?.url) return;
+    try {
+      await Share.share({ message: result.url });
+    } catch (e) {
+      Alert.alert('Could not share', String(e.message || e));
     }
   }
 
@@ -187,6 +241,36 @@ export default function NewQuoteScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 140 }}>
+        {/* Result — quote link to send the customer */}
+        {result && (
+          <View style={[s.card, s.resultCard]}>
+            <View style={s.resultHeader}>
+              <Ionicons name="checkmark-circle" size={22} color="#1A7F37" />
+              <Text style={s.resultTitle}>Quote link ready</Text>
+            </View>
+            <Text style={s.resultHint}>
+              Send this link to {customer?.full_name || 'your customer'}. They'll review the
+              quote, accept the terms, and pay on our branded page.
+            </Text>
+            {typeof result.total_cents === 'number' && (
+              <Text style={s.resultTotal}>Total: ${(result.total_cents / 100).toFixed(2)}</Text>
+            )}
+            <View style={s.linkBox}>
+              <Text style={s.linkText} selectable numberOfLines={2}>{result.url}</Text>
+            </View>
+            <View style={s.resultActions}>
+              <TouchableOpacity onPress={handleShareLink} style={s.resultBtn}>
+                <Ionicons name="copy-outline" size={18} color={C.text} />
+                <Text style={s.resultBtnText}>Copy link</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShareLink} style={s.resultBtn}>
+                <Ionicons name="share-outline" size={18} color={C.text} />
+                <Text style={s.resultBtnText}>Share</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Customer */}
         <View style={s.card}>
           <Text style={s.cardLabel}>CUSTOMER</Text>
@@ -346,16 +430,23 @@ export default function NewQuoteScreen() {
       {/* Sticky footer. ("Save as Draft" was a dead button — removed until
           drafts actually exist.) */}
       <View style={s.footer}>
-        <TouchableOpacity style={[s.btnPrimary, (sending || !customer || items.length === 0) && { opacity: 0.5 }]} onPress={handleSend} disabled={sending || !customer || items.length === 0}>
-          {sending ? (
-            <ActivityIndicator color={C.onPrimary} />
-          ) : (
-            <>
-              <Text style={s.btnPrimaryText}>Send Quote</Text>
-              <Ionicons name="arrow-forward" size={18} color={C.onPrimary} />
-            </>
-          )}
-        </TouchableOpacity>
+        {result ? (
+          <TouchableOpacity style={s.btnPrimary} onPress={() => router.back()}>
+            <Text style={s.btnPrimaryText}>Done</Text>
+            <Ionicons name="checkmark" size={18} color={C.onPrimary} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={[s.btnPrimary, (sending || !customer || items.length === 0) && { opacity: 0.5 }]} onPress={handleSend} disabled={sending || !customer || items.length === 0}>
+            {sending ? (
+              <ActivityIndicator color={C.onPrimary} />
+            ) : (
+              <>
+                <Text style={s.btnPrimaryText}>Create Quote Link</Text>
+                <Ionicons name="arrow-forward" size={18} color={C.onPrimary} />
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Add Item modal */}
@@ -376,7 +467,7 @@ export default function NewQuoteScreen() {
               ))}
             </View>
             <ScrollView style={{ maxHeight: 360 }}>
-              {addItemTab === 'dumpsters' && CATALOG_DUMPSTERS.map((d) => (
+              {addItemTab === 'dumpsters' && catalogDumpsters.map((d) => (
                 <TouchableOpacity key={d.key} onPress={() => addItem({ ...d, icon: '📦' })} style={s.catalogRow}>
                   <Text style={s.itemIcon}>📦</Text>
                   <View style={{ flex: 1 }}>
@@ -386,7 +477,7 @@ export default function NewQuoteScreen() {
                   <Text style={s.itemPrice}>${d.price.toFixed(2)}</Text>
                 </TouchableOpacity>
               ))}
-              {addItemTab === 'items' && CATALOG_ITEMS.map((i) => (
+              {addItemTab === 'items' && catalogItems.map((i) => (
                 <TouchableOpacity key={i.key} onPress={() => addItem({ ...i, icon: '🪑' })} style={s.catalogRow}>
                   <Text style={s.itemIcon}>🪑</Text>
                   <View style={{ flex: 1 }}>
@@ -578,4 +669,26 @@ const s = StyleSheet.create({
   tabText: { fontSize: 12, fontWeight: '600', color: C.textMuted },
   tabTextActive: { color: C.text },
   catalogRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+
+  resultCard: { backgroundColor: '#F0FAF2', borderColor: '#1A7F37', borderWidth: 1 },
+  resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  resultTitle: { fontSize: 16, fontWeight: '800', color: '#1A7F37' },
+  resultHint: { fontSize: 13, color: C.text, lineHeight: 18 },
+  resultTotal: { fontSize: 14, fontWeight: '700', color: C.text, marginTop: 8 },
+  linkBox: { marginTop: 10, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12 },
+  linkText: { fontSize: 13, color: C.accent, fontWeight: '600' },
+  resultActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  resultBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.card,
+  },
+  resultBtnText: { fontSize: 14, fontWeight: '700', color: C.text },
 });

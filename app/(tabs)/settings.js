@@ -7,6 +7,8 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,11 +16,13 @@ import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { COMPANY } from '../../src/data/mockData';
+import { DEFAULT_PRICING, fetchProviderPricing } from '../../src/data/pricingDefaults';
 import {
   bg,
   bgCard,
   border,
   primary,
+  onPrimary,
   success,
   warning,
   danger,
@@ -52,6 +56,32 @@ function InfoRow({ label, value, icon }) {
   );
 }
 
+// Editable price row used inside the Pricing panel. `helper` is small,
+// read-only text shown under the label (weight/days/dims). `value` is the
+// numeric price as a string; `onChange` receives the raw text.
+function PriceRow({ label, helper, value, onChange }) {
+  return (
+    <View style={styles.priceRow}>
+      <View style={styles.priceInfo}>
+        <Text style={styles.priceLabel}>{label}</Text>
+        {helper ? <Text style={styles.priceHelper}>{helper}</Text> : null}
+      </View>
+      <View style={styles.priceInputWrap}>
+        <Text style={styles.priceDollar}>$</Text>
+        <TextInput
+          style={styles.priceInput}
+          value={value}
+          onChangeText={onChange}
+          keyboardType="decimal-pad"
+          placeholder="0"
+          placeholderTextColor={textMuted}
+          selectTextOnFocus
+        />
+      </View>
+    </View>
+  );
+}
+
 function DriverRow({ driver }) {
   const statusColor = driver.status === 'active' ? success : textMuted;
   const statusLabel = driver.status === 'active' ? 'Active' : 'Inactive';
@@ -78,6 +108,13 @@ export default function SettingsScreen() {
 
   const [trucks, setTrucks] = useState([]);
 
+  // Editable pricing config. Loaded from BD's quote-config API on mount,
+  // falling back to DEFAULT_PRICING. Numeric prices are kept as strings while
+  // editing so the inputs behave; we parse them back to numbers on save.
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [pricingLoading, setPricingLoading] = useState(true);
+  const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved'
+
   useEffect(() => {
     (async () => {
       const cid = await getCompanyId();
@@ -90,6 +127,80 @@ export default function SettingsScreen() {
       setTrucks(data || []);
     })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const cid = await getCompanyId();
+      const config = await fetchProviderPricing(cid);
+      setPricing(config);
+      setPricingLoading(false);
+    })();
+  }, []);
+
+  // Update one size's price (string) by key.
+  function setSizePrice(key, text) {
+    setSaveState('idle');
+    setPricing((prev) => ({
+      ...prev,
+      sizes: prev.sizes.map((s) => (s.key === key ? { ...s, price: text } : s)),
+    }));
+  }
+
+  // Update one special item's price (string) by key.
+  function setItemPrice(key, text) {
+    setSaveState('idle');
+    setPricing((prev) => ({
+      ...prev,
+      items: prev.items.map((i) => (i.key === key ? { ...i, price: text } : i)),
+    }));
+  }
+
+  // Update a flat fee field (extraDay / overweight / cancelFee).
+  function setFee(field, text) {
+    setSaveState('idle');
+    setPricing((prev) => ({ ...prev, [field]: text }));
+  }
+
+  async function handleSavePricing() {
+    const cid = await getCompanyId();
+    if (!cid) {
+      Alert.alert('Error', 'Could not resolve your company; reload and try again.');
+      return;
+    }
+    // Normalize: coerce every price/fee from string back to a number.
+    const num = (v) => {
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const config = {
+      ...pricing,
+      sizes: pricing.sizes.map((s) => ({ ...s, price: num(s.price) })),
+      items: pricing.items.map((i) => ({ ...i, price: num(i.price) })),
+      extraDay: num(pricing.extraDay),
+      overweight: num(pricing.overweight),
+      cancelFee: num(pricing.cancelFee),
+    };
+    setSaveState('saving');
+    try {
+      const res = await fetch('https://bookingdumpsters.com/api/provider/quote-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider_id: cid, config }),
+      });
+      // The table may not exist yet (persisted:false) — that's fine, the
+      // request still succeeds. Only a non-OK HTTP status is a real failure.
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `API returned ${res.status}`);
+      }
+      // Reflect the normalized numbers back into state.
+      setPricing(config);
+      setSaveState('saved');
+    } catch (e) {
+      setSaveState('idle');
+      Alert.alert('Could not save pricing', String(e.message || e));
+    }
+  }
 
   const handleLogout = () => {
     Alert.alert(
@@ -128,28 +239,71 @@ export default function SettingsScreen() {
           <InfoRow label="Hours" value={COMPANY.hours} icon="time-outline" />
         </SectionCard>
 
-        {/* Pricing */}
+        {/* Pricing — editable. Single source the Quote Generator reads from. */}
         <SectionCard title="Pricing" icon="pricetag-outline">
-          <InfoRow
-            label="Web Discount"
-            value={`${COMPANY.webDiscount}%`}
-            icon="gift-outline"
-          />
-          <InfoRow
-            label="Cancellation Fee"
-            value={`$${COMPANY.cancellationFee}`}
-            icon="close-circle-outline"
-          />
-          <InfoRow
-            label="Overweight Fee"
-            value={`$${COMPANY.overweightFee}`}
-            icon="warning-outline"
-          />
-          <InfoRow
-            label="Extra Day Fee"
-            value="$49/day"
-            icon="calendar-outline"
-          />
+          {pricingLoading ? (
+            <ActivityIndicator color={primary} style={{ paddingVertical: 16 }} />
+          ) : (
+            <>
+              <Text style={styles.priceGroupTitle}>Dumpster sizes</Text>
+              {pricing.sizes.map((sz) => (
+                <PriceRow
+                  key={sz.key}
+                  label={sz.label}
+                  helper={`${sz.weight} · ${sz.days} days · ${sz.dims}`}
+                  value={String(sz.price)}
+                  onChange={(t) => setSizePrice(sz.key, t)}
+                />
+              ))}
+
+              <Text style={[styles.priceGroupTitle, styles.priceGroupSpaced]}>Special items</Text>
+              {pricing.items.map((it) => (
+                <PriceRow
+                  key={it.key}
+                  label={it.label}
+                  value={String(it.price)}
+                  onChange={(t) => setItemPrice(it.key, t)}
+                />
+              ))}
+
+              <Text style={[styles.priceGroupTitle, styles.priceGroupSpaced]}>Fees</Text>
+              <PriceRow
+                label="Extra day"
+                helper="per day"
+                value={String(pricing.extraDay)}
+                onChange={(t) => setFee('extraDay', t)}
+              />
+              <PriceRow
+                label="Overweight"
+                helper="per extra ton"
+                value={String(pricing.overweight)}
+                onChange={(t) => setFee('overweight', t)}
+              />
+              <PriceRow
+                label="Cancellation"
+                helper="no 24h notice"
+                value={String(pricing.cancelFee)}
+                onChange={(t) => setFee('cancelFee', t)}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveBtn, saveState === 'saving' && { opacity: 0.6 }]}
+                onPress={handleSavePricing}
+                disabled={saveState === 'saving'}
+              >
+                {saveState === 'saving' ? (
+                  <ActivityIndicator color={onPrimary} />
+                ) : saveState === 'saved' ? (
+                  <>
+                    <Ionicons name="checkmark" size={18} color={onPrimary} />
+                    <Text style={styles.saveBtnText}>Saved</Text>
+                  </>
+                ) : (
+                  <Text style={styles.saveBtnText}>Save pricing</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
         </SectionCard>
 
         {/* Service Area */}
@@ -294,6 +448,73 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: text,
     fontWeight: '500',
+  },
+  priceGroupTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  priceGroupSpaced: {
+    marginTop: 18,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 12,
+  },
+  priceInfo: {
+    flex: 1,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: text,
+    fontWeight: '500',
+  },
+  priceHelper: {
+    fontSize: 11,
+    color: textMuted,
+    marginTop: 2,
+  },
+  priceInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    minWidth: 92,
+  },
+  priceDollar: {
+    fontSize: 14,
+    color: textMuted,
+    marginRight: 2,
+  },
+  priceInput: {
+    flex: 1,
+    fontSize: 15,
+    color: text,
+    fontWeight: '600',
+    paddingVertical: 8,
+    textAlign: 'right',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: primary,
+    borderRadius: 10,
+    paddingVertical: 13,
+    marginTop: 20,
+  },
+  saveBtnText: {
+    color: onPrimary,
+    fontSize: 15,
+    fontWeight: '700',
   },
   citiesGrid: {
     flexDirection: 'row',
