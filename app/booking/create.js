@@ -271,7 +271,8 @@ export default function CreateBooking() {
   const [email, setEmail] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  // CRM autocomplete — pulls from the customers table (RLS-scoped).
+  // Customer autocomplete — merges the CRM (Supabase customers table) with the
+  // provider's OWN Stripe customers (via BD's provider-aware search endpoint).
   const [crmSuggestions, setCrmSuggestions] = useState([]);
   useEffect(() => {
     if (!name || name.length < 2) {
@@ -280,15 +281,33 @@ export default function CreateBooking() {
     }
     let stale = false;
     const t = setTimeout(async () => {
-      const rows = await searchCustomers(name);
-      if (!stale) setCrmSuggestions(rows.slice(0, 5));
-    }, 200);
+      const [crm, stripe] = await Promise.all([
+        searchCustomers(name).catch(() => []),
+        companyId
+          ? fetch(`https://bookingdumpsters.com/api/customers/search?provider_id=${encodeURIComponent(companyId)}&q=${encodeURIComponent(name)}`)
+              .then((r) => (r.ok ? r.json() : { customers: [] }))
+              .then((d) => d.customers || [])
+              .catch(() => [])
+          : Promise.resolve([]),
+      ]);
+      if (stale) return;
+      // Dedupe by email (fallback name), CRM first.
+      const seen = new Set();
+      const merged = [];
+      for (const c of [...crm, ...stripe]) {
+        const k = (c.email || c.full_name || '').toLowerCase();
+        if (k && seen.has(k)) continue;
+        if (k) seen.add(k);
+        merged.push(c);
+      }
+      setCrmSuggestions(merged.slice(0, 8));
+    }, 250);
     return () => { stale = true; clearTimeout(t); };
-  }, [name]);
+  }, [name, companyId]);
   function selectCrmSuggestion(c) {
     setName(c.full_name || '');
     setEmail(c.email || '');
-    setPhone(c.phone || '');
+    setPhone(formatUSPhone(c.phone || ''));
     if (c.billing_address?.street) {
       setBillingAddress(c.billing_address.street);
       if (c.billing_address.city) setBillingCity(c.billing_address.city);
