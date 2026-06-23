@@ -82,6 +82,36 @@ function PriceRow({ label, helper, value, onChange }) {
   );
 }
 
+// Editable special-item row: rename the extra, set its price, or remove it.
+function EditableItemRow({ label, value, onChangeLabel, onChangePrice, onRemove }) {
+  return (
+    <View style={styles.priceRow}>
+      <TextInput
+        style={[styles.priceLabel, styles.itemLabelInput]}
+        value={label}
+        onChangeText={onChangeLabel}
+        placeholder="Extra name"
+        placeholderTextColor={textMuted}
+      />
+      <View style={styles.priceInputWrap}>
+        <Text style={styles.priceDollar}>$</Text>
+        <TextInput
+          style={styles.priceInput}
+          value={value}
+          onChangeText={onChangePrice}
+          keyboardType="decimal-pad"
+          placeholder="0"
+          placeholderTextColor={textMuted}
+          selectTextOnFocus
+        />
+      </View>
+      <TouchableOpacity onPress={onRemove} style={styles.itemRemoveBtn} hitSlop={8}>
+        <Ionicons name="close-circle" size={20} color={textMuted} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function DriverRow({ driver }) {
   const statusColor = driver.status === 'active' ? success : textMuted;
   const statusLabel = driver.status === 'active' ? 'Active' : 'Inactive';
@@ -152,6 +182,34 @@ export default function SettingsScreen() {
     setPricing((prev) => ({
       ...prev,
       items: prev.items.map((i) => (i.key === key ? { ...i, price: text } : i)),
+    }));
+  }
+
+  // Rename a special item (its customer-facing label) by key.
+  function setItemLabel(key, text) {
+    setSaveState('idle');
+    setPricing((prev) => ({
+      ...prev,
+      items: prev.items.map((i) => (i.key === key ? { ...i, label: text } : i)),
+    }));
+  }
+
+  // Append a new, empty extra the provider can name + price.
+  function addExtra() {
+    setSaveState('idle');
+    const key = `extra_${Date.now()}`;
+    setPricing((prev) => ({
+      ...prev,
+      items: [...(prev.items || []), { key, label: '', price: '' }],
+    }));
+  }
+
+  // Remove a special item by key.
+  function removeItem(key) {
+    setSaveState('idle');
+    setPricing((prev) => ({
+      ...prev,
+      items: (prev.items || []).filter((i) => i.key !== key),
     }));
   }
 
@@ -258,13 +316,19 @@ export default function SettingsScreen() {
 
               <Text style={[styles.priceGroupTitle, styles.priceGroupSpaced]}>Special items</Text>
               {pricing.items.map((it) => (
-                <PriceRow
+                <EditableItemRow
                   key={it.key}
                   label={it.label}
                   value={String(it.price)}
-                  onChange={(t) => setItemPrice(it.key, t)}
+                  onChangeLabel={(t) => setItemLabel(it.key, t)}
+                  onChangePrice={(t) => setItemPrice(it.key, t)}
+                  onRemove={() => removeItem(it.key)}
                 />
               ))}
+              <TouchableOpacity style={styles.addExtraBtn} onPress={addExtra} activeOpacity={0.8}>
+                <Ionicons name="add" size={18} color={text} />
+                <Text style={styles.addExtraText}>Add extra</Text>
+              </TouchableOpacity>
 
               <Text style={[styles.priceGroupTitle, styles.priceGroupSpaced]}>Fees</Text>
               <PriceRow
@@ -500,6 +564,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingVertical: 8,
     textAlign: 'right',
+  },
+  itemLabelInput: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: border,
+    paddingVertical: 6,
+  },
+  itemRemoveBtn: {
+    paddingLeft: 2,
+  },
+  addExtraBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: border,
+  },
+  addExtraText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: text,
   },
   saveBtn: {
     flexDirection: 'row',

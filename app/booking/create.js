@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   Platform,
+  Share,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -24,6 +25,7 @@ import {
   DELIVERY_WINDOWS,
   SPECIAL_ITEM_FEES,
 } from '../../src/data/mockData';
+import { DEFAULT_PRICING, fetchProviderPricing } from '../../src/data/pricingDefaults';
 import {
   status,
 } from '../../src/theme/colors';
@@ -314,6 +316,51 @@ export default function CreateBooking() {
   const [generatedBy, setGeneratedBy] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [sendingQuote, setSendingQuote] = useState(false);
+
+  // Provider pricing config (set in Settings → Pricing). Drives the dumpster
+  // base prices + special items so this screen quotes with the SAME numbers
+  // the provider edits in Settings — instead of the stale mock prices.
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [creatingLink, setCreatingLink] = useState(false);
+  const [quoteLink, setQuoteLink] = useState(null); // { url, token, total_cents }
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const cfg = await fetchProviderPricing(companyId);
+      if (alive && cfg) setPricing(cfg);
+    })();
+    return () => { alive = false; };
+  }, [companyId]);
+
+  // Special-items catalog: from Settings config when available, else mock.
+  const specialItemsCatalog = useMemo(() => {
+    const fromCfg = (pricing?.items || []).map((i) => ({
+      id: i.key,
+      label: i.label,
+      fee: Number(i.price) || 0,
+    }));
+    return fromCfg.length ? fromCfg : SPECIAL_ITEM_FEES;
+  }, [pricing]);
+
+  // Resolve a dumpster size's base price from the Settings config, matching
+  // the screen's size id ('10yd'/'20yd'/'30yd') + service type onto the config
+  // size keys ('10_general'/'10_clean'/'10_mixed'/'20'/'30'). Returns null when
+  // there's no match, so the caller can fall back to the mock price.
+  const configPriceForSize = useCallback((sizeId, svcId) => {
+    const sizes = pricing?.sizes || [];
+    const find = (k) => {
+      const row = sizes.find((s) => s.key === k);
+      return row ? Number(row.price) || 0 : null;
+    };
+    if (sizeId === '20yd') return find('20');
+    if (sizeId === '30yd') return find('30');
+    if (sizeId === '10yd') {
+      if (svcId === 'clean_soil' || svcId === 'clean_concrete') return find('10_clean');
+      if (svcId === 'mix') return find('10_mixed');
+      return find('10_general');
+    }
+    return null;
+  }, [pricing]);
 
   // Customer autocomplete from Stripe API
   const [stripeCustomers, setStripeCustomers] = useState([]);
@@ -686,6 +733,88 @@ export default function CreateBooking() {
     }
   };
 
+  // Customer-facing terms, built from the Settings pricing config.
+  const buildTerms = () => {
+    const p = pricing || DEFAULT_PRICING;
+    return [
+      `Extra days: $${p.extraDay}/day beyond the included rental period`,
+      `Overweight: $${p.overweight}/ton (prorated) beyond included tonnage`,
+      `Cancellation: 24-hour notice required. $${p.cancelFee} cancellation fee applies`,
+      'Delivery, pickup & disposal are included in the price',
+      'A team member will contact you to confirm delivery details',
+    ];
+  };
+
+  // CREATE QUOTE LINK — the branded-page flow. Instead of emailing a Stripe
+  // invoice (Send Quote), this mints a link to OUR checkout page where the
+  // customer accepts the T&C and pays by card on the provider's Stripe Connect
+  // account. Prices come from the form (which now reads Settings config).
+  const handleCreateQuoteLink = async () => {
+    if (!name.trim()) { Alert.alert('Required', 'Customer name is required.'); return; }
+    if (!email.trim() && !phone.trim()) { Alert.alert('Required', 'Email or phone is required.'); return; }
+    if (!basePrice || parseFloat(basePrice) <= 0) { Alert.alert('Required', 'Base price must be greater than 0.'); return; }
+    if (!companyId) { Alert.alert('Error', 'Provider not resolved yet — reload and retry.'); return; }
+
+    setCreatingLink(true);
+    try {
+      const svc = SERVICE_TYPES.find((s) => s.id === serviceType);
+      const sz = DUMPSTER_SIZES.find((s) => s.id === dumpsterSize);
+      const serviceLabel = svc?.label || serviceType || '';
+      const sizeLabel = sz?.label || dumpsterSize || '';
+      const mainLabel = [sizeLabel, serviceLabel].filter(Boolean).join(' — ') || 'Dumpster Rental';
+
+      const lineItems = [{
+        label: mainLabel,
+        amount_cents: Math.round((parseFloat(basePrice) || 0) * 100),
+        qty: 1,
+      }];
+      if (parseFloat(discount) > 0) {
+        lineItems.push({ label: 'Discount', amount_cents: -Math.round(Math.abs(parseFloat(discount)) * 100), qty: 1 });
+      }
+      Object.values(selectedSpecialItems).forEach((it) => {
+        if (it && it.fee > 0) {
+          lineItems.push({ label: it.label || 'Special item', amount_cents: Math.round(it.fee * 100), qty: it.qty || 1 });
+        }
+      });
+
+      const payload = {
+        provider_id: companyId,
+        customer: { name: name.trim(), email: email.trim() || undefined, phone: phone.trim() || undefined },
+        items: lineItems,
+        size: sizeLabel || undefined,
+        service: serviceLabel || undefined,
+        delivery_address: fullDeliveryAddress || undefined,
+        billing_address: fullBillingAddress || undefined,
+        terms: buildTerms(),
+        notes: notes.trim() || undefined,
+      };
+
+      const res = await fetch('https://bookingdumpsters.com/api/quotes/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data?.error || `Quote API returned ${res.status}`);
+      setQuoteLink(data);
+    } catch (err) {
+      Alert.alert('Could not create quote link', err.message || 'Connection error. Try again.');
+    } finally {
+      setCreatingLink(false);
+    }
+  };
+
+  // Copy/share routes through the OS share sheet (expo-clipboard isn't a dep and
+  // RN 0.81 dropped the core Clipboard module).
+  const handleShareLink = async () => {
+    if (!quoteLink?.url) return;
+    try {
+      await Share.share({ message: quoteLink.url });
+    } catch (err) {
+      Alert.alert('Could not share', err.message || String(err));
+    }
+  };
+
   // ── Render helpers ──
 
   const renderPill = (label, isSelected, onPress, color) => (
@@ -744,6 +873,42 @@ export default function CreateBooking() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+
+        {/* ── QUOTE LINK READY ── */}
+        {quoteLink && (
+          <View style={[s.card, { borderColor: success, backgroundColor: '#F0FAF2' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="checkmark-circle" size={22} color={success} />
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A7F37' }}>Quote link ready</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: textColor, lineHeight: 18 }}>
+              Send this link to {name.trim() || 'your customer'}. They'll review the quote, accept
+              the terms, and pay on your branded page.
+            </Text>
+            {typeof quoteLink.total_cents === 'number' && (
+              <Text style={{ fontSize: 14, fontWeight: '700', color: textColor, marginTop: 8 }}>
+                Total: ${(quoteLink.total_cents / 100).toFixed(2)}
+              </Text>
+            )}
+            <View style={{ marginTop: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: border, borderRadius: 10, padding: 12 }}>
+              <Text selectable numberOfLines={2} style={{ fontSize: 13, color: info, fontWeight: '600' }}>{quoteLink.url}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <TouchableOpacity onPress={handleShareLink} style={s.linkActionBtn} activeOpacity={0.8}>
+                <Ionicons name="copy-outline" size={18} color={textColor} />
+                <Text style={s.linkActionText}>Copy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShareLink} style={s.linkActionBtn} activeOpacity={0.8}>
+                <Ionicons name="share-outline" size={18} color={textColor} />
+                <Text style={s.linkActionText}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setQuoteLink(null)} style={s.linkActionBtn} activeOpacity={0.8}>
+                <Ionicons name="close" size={18} color={textColor} />
+                <Text style={s.linkActionText}>New</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* ── CUSTOMER INFO ── */}
         <View style={s.card}>
@@ -1084,7 +1249,10 @@ export default function CreateBooking() {
                 const availCount = (state.dumpsters || []).filter(d => d.size === sz.id && d.status === 'available').length;
                 if (count === 0) return null;
                 const selectedSvc = SERVICE_TYPES.find((t) => t.id === serviceType);
-                const price = (selectedSvc && selectedSvc.priceOverride && selectedSvc.priceOverride[sz.id]) || sz.basePrice;
+                const cfgPrice = configPriceForSize(sz.id, serviceType);
+                const price = cfgPrice != null
+                  ? cfgPrice
+                  : ((selectedSvc && selectedSvc.priceOverride && selectedSvc.priceOverride[sz.id]) || sz.basePrice);
                 return renderPill(
                   `${sz.label} \u2014 $${price} (${availCount} avail)`,
                   dumpsterSize === sz.id,
@@ -1151,7 +1319,7 @@ export default function CreateBooking() {
 
           <Text style={s.label}>Special Items</Text>
           <View style={s.specialGrid}>
-            {SPECIAL_ITEM_FEES.map((item) => {
+            {specialItemsCatalog.map((item) => {
               const isSelected = !!selectedSpecialItems[item.id];
               return (
                 <View key={item.id} style={s.specialRow}>
@@ -1366,6 +1534,22 @@ export default function CreateBooking() {
               Sends Stripe invoice + SMS to client
             </Text>
 
+            {/* Create Quote Link — branded accept-&-pay page */}
+            <TouchableOpacity
+              style={[s.submitBtn, { backgroundColor: '#14213D', marginTop: 4 }]}
+              onPress={handleCreateQuoteLink}
+              activeOpacity={0.85}
+              disabled={creatingLink}
+            >
+              <Ionicons name="link" size={20} color="#FFFFFF" />
+              <Text style={[s.submitBtnText, { color: '#FFFFFF' }]}>
+                {creatingLink ? 'Creating link...' : 'Create Quote Link'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={{ textAlign: 'center', fontSize: 11, color: textMuted, marginTop: -6 }}>
+              Branded page — client accepts terms & pays by card
+            </Text>
+
             {/* Book Direct */}
             <TouchableOpacity
               style={[s.submitBtn, { backgroundColor: '#E8E8E8', marginTop: 4 }]}
@@ -1391,6 +1575,19 @@ export default function CreateBooking() {
 const s = StyleSheet.create({
   // Layout
   container: { flex: 1, backgroundColor: bg },
+  linkActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: border,
+    backgroundColor: '#FFFFFF',
+  },
+  linkActionText: { fontSize: 14, fontWeight: '700', color: textColor },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingTop: 12 },
 

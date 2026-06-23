@@ -17,7 +17,7 @@ export const DEFAULT_PRICING = {
     { key: '30',         label: '30 yd', price: 799, weight: '3 tons', days: 7, dims: '16×8×6 ft' },
   ],
   items: [
-    { key: 'mattress', label: 'Mattress', price: 50 },
+    { key: 'mattress', label: 'Mattress', price: 59 },
     { key: 'tire', label: 'Tire', price: 20 },
     { key: 'electronic', label: 'Electronic', price: 59 },
     { key: 'appliance', label: 'Appliance', price: 59 },
