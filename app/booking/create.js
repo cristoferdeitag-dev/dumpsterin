@@ -49,6 +49,15 @@ const info = '#2196F3';
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const SOURCE_OPTIONS = ['phone', 'website', 'walkin'];
 
+// Format a US phone as the user types: (XXX) XXX-XXXX, capped at 10 digits.
+function formatUSPhone(input) {
+  const d = String(input || '').replace(/\D/g, '').slice(0, 10);
+  if (d.length === 0) return '';
+  if (d.length < 4) return `(${d}`;
+  if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
 // ── Calendar theme ──
 const calendarTheme = {
   backgroundColor: bgCard,
@@ -323,6 +332,7 @@ export default function CreateBooking() {
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
   const [creatingLink, setCreatingLink] = useState(false);
   const [quoteLink, setQuoteLink] = useState(null); // { url, token, total_cents }
+  const [linkError, setLinkError] = useState(''); // visible error for the link flow (Alert is unreliable on web)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -750,10 +760,13 @@ export default function CreateBooking() {
   // customer accepts the T&C and pays by card on the provider's Stripe Connect
   // account. Prices come from the form (which now reads Settings config).
   const handleCreateQuoteLink = async () => {
-    if (!name.trim()) { Alert.alert('Required', 'Customer name is required.'); return; }
-    if (!email.trim() && !phone.trim()) { Alert.alert('Required', 'Email or phone is required.'); return; }
-    if (!basePrice || parseFloat(basePrice) <= 0) { Alert.alert('Required', 'Base price must be greater than 0.'); return; }
-    if (!companyId) { Alert.alert('Error', 'Provider not resolved yet — reload and retry.'); return; }
+    // Inline errors (Alert.alert is unreliable on web — shows nothing on some
+    // mobile browsers, which looked like "the button does nothing").
+    setLinkError('');
+    if (!name.trim()) { setLinkError('Add the customer name.'); return; }
+    if (!email.trim() && !phone.trim()) { setLinkError('Add an email or a phone for the customer.'); return; }
+    if (!basePrice || parseFloat(basePrice) <= 0) { setLinkError('Pick a Service Type + Dumpster Size so it sets a Base Price (or type one).'); return; }
+    if (!companyId) { setLinkError('Could not resolve your company — reload and retry.'); return; }
 
     setCreatingLink(true);
     try {
@@ -798,7 +811,7 @@ export default function CreateBooking() {
       if (!res.ok || !data.url) throw new Error(data?.error || `Quote API returned ${res.status}`);
       setQuoteLink(data);
     } catch (err) {
-      Alert.alert('Could not create quote link', err.message || 'Connection error. Try again.');
+      setLinkError(err.message || 'Connection error. Try again.');
     } finally {
       setCreatingLink(false);
     }
@@ -923,33 +936,13 @@ export default function CreateBooking() {
               value={name}
               onChangeText={(val) => {
                 setName(val);
-                setCustomerSearch(val);
                 setShowCustomerDropdown(true);
-                searchStripeCustomers(val);
               }}
-              placeholder="Search existing customers..."
+              placeholder="Type customer name (or pick a saved one)"
               placeholderTextColor={textMuted}
             />
-            {showCustomerDropdown && filteredCustomers.length > 0 && (
-              <View style={s.acDropdown}>
-                {filteredCustomers.map((c) => (
-                  <TouchableOpacity
-                    key={c.id || c.email}
-                    style={s.acItem}
-                    onPress={() => selectCustomer(c)}
-                  >
-                    <Ionicons name="person-circle-outline" size={18} color={primaryLight} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.acMainText}>{c.name}</Text>
-                      <Text style={s.acSecText}>{c.email || c.phone}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            {/* CRM autocomplete — from our `customers` table. Distinct from
-                the Stripe-search results above so the provider can pick
-                from their own CRM history first. */}
+            {/* CRM autocomplete — from our `customers` table. Suggests saved
+                customers as you type; just type a new name if there are none. */}
             {crmSuggestions.length > 0 && (
               <View style={s.acDropdown}>
                 {crmSuggestions.map((c) => (
@@ -967,10 +960,10 @@ export default function CreateBooking() {
                 ))}
               </View>
             )}
-            {filteredCustomers.length === 0 && crmSuggestions.length === 0 && name.length >= 2 && showCustomerDropdown && (
+            {crmSuggestions.length === 0 && name.length >= 2 && (
               <View style={s.acHintRow}>
-                <Ionicons name="search-outline" size={13} color={textMuted} />
-                <Text style={s.acHintText}>No matching customers</Text>
+                <Ionicons name="information-circle-outline" size={13} color={textMuted} />
+                <Text style={s.acHintText}>No saved customer — just fill in email & phone below.</Text>
               </View>
             )}
           </View>
@@ -981,10 +974,11 @@ export default function CreateBooking() {
               <TextInput
                 style={[s.input, phone.length > 0 && s.inputFilled]}
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(t) => setPhone(formatUSPhone(t))}
                 placeholder="(510) 555-0000"
                 placeholderTextColor={textMuted}
                 keyboardType="phone-pad"
+                maxLength={14}
               />
             </View>
             <View style={s.col}>
@@ -1535,6 +1529,12 @@ export default function CreateBooking() {
             </Text>
 
             {/* Create Quote Link — branded accept-&-pay page */}
+            {linkError ? (
+              <View style={s.linkErrorBox}>
+                <Ionicons name="alert-circle" size={18} color={danger} />
+                <Text style={s.linkErrorText}>{linkError}</Text>
+              </View>
+            ) : null}
             <TouchableOpacity
               style={[s.submitBtn, { backgroundColor: '#14213D', marginTop: 4 }]}
               onPress={handleCreateQuoteLink}
@@ -1588,6 +1588,19 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   linkActionText: { fontSize: 14, fontWeight: '700', color: textColor },
+  linkErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: danger + '12',
+    borderWidth: 1,
+    borderColor: danger + '55',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  linkErrorText: { flex: 1, fontSize: 13, color: danger, fontWeight: '600' },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingTop: 12 },
 
