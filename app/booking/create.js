@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   Share,
+  Linking,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -333,6 +334,13 @@ export default function CreateBooking() {
   const [creatingLink, setCreatingLink] = useState(false);
   const [quoteLink, setQuoteLink] = useState(null); // { url, token, total_cents }
   const [linkError, setLinkError] = useState(''); // visible error for the link flow (Alert is unreliable on web)
+  const scrollRef = useRef(null);
+  // When the quote link is created, scroll to the top so the result card (which
+  // renders above the form) is actually visible — otherwise it looks like
+  // "nothing happened" because the card is off-screen above the button.
+  useEffect(() => {
+    if (quoteLink) scrollRef.current?.scrollTo?.({ y: 0, animated: true });
+  }, [quoteLink]);
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -824,7 +832,17 @@ export default function CreateBooking() {
     try {
       await Share.share({ message: quoteLink.url });
     } catch (err) {
-      Alert.alert('Could not share', err.message || String(err));
+      setLinkError(err.message || String(err));
+    }
+  };
+
+  // Open the customer page to preview it (new tab on web).
+  const handleOpenLink = () => {
+    if (!quoteLink?.url) return;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.open(quoteLink.url, '_blank');
+    } else {
+      Linking.openURL(quoteLink.url).catch(() => {});
     }
   };
 
@@ -881,6 +899,7 @@ export default function CreateBooking() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={s.scroll}
         contentContainerStyle={s.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -906,7 +925,11 @@ export default function CreateBooking() {
             <View style={{ marginTop: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: border, borderRadius: 10, padding: 12 }}>
               <Text selectable numberOfLines={2} style={{ fontSize: 13, color: info, fontWeight: '600' }}>{quoteLink.url}</Text>
             </View>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+            <TouchableOpacity onPress={handleOpenLink} style={[s.submitBtn, { backgroundColor: success, marginTop: 12 }]} activeOpacity={0.85}>
+              <Ionicons name="open-outline" size={20} color="#FFFFFF" />
+              <Text style={[s.submitBtnText, { color: '#FFFFFF' }]}>Open / Preview</Text>
+            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
               <TouchableOpacity onPress={handleShareLink} style={s.linkActionBtn} activeOpacity={0.8}>
                 <Ionicons name="copy-outline" size={18} color={textColor} />
                 <Text style={s.linkActionText}>Copy</Text>
