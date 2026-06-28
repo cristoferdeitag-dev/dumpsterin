@@ -14,10 +14,13 @@ async function authToken() {
 }
 
 export async function fetchMarketplaceOrders() {
+  // Active jobs (paid..picking_up) PLUS jobs that were picked up and still owe
+  // a disposal report (status flips to "completed" on pickup, so we also match
+  // disposal_status to keep them visible until the report is submitted).
   const { data, error } = await supabase
     .from('bd_bookings')
-    .select('id, booking_number, customer_name, customer_phone, street, city, zip, size, material, delivery_date, pickup_date, delivery_window, delivery_slot, status, provider_confirmation_status, provider_acceptance_deadline, total_cents')
-    .in('status', ['paid', 'dispatched', 'delivered', 'picking_up'])
+    .select('id, booking_number, customer_name, customer_phone, street, city, zip, size, material, delivery_date, pickup_date, delivery_window, delivery_slot, status, provider_confirmation_status, provider_acceptance_deadline, pickup_status, disposal_status, total_cents')
+    .or('status.in.(paid,dispatched,delivered,picking_up),disposal_status.eq.in_transit_to_transfer_station')
     .order('delivery_date', { ascending: true });
   if (error) {
     console.error('fetchMarketplaceOrders:', error);
@@ -82,6 +85,27 @@ export function deliveryOnTheWay(bookingNumber) {
 export function completeDelivery(bookingNumber, photoUrls) {
   return bdPost(`/api/provider/booking/${encodeURIComponent(bookingNumber)}/delivery`,
     { action: 'complete', delivery_photo_urls: photoUrls });
+}
+
+// Pickup: on the way (delivered -> picking_up).
+export function pickupOnTheWay(bookingNumber) {
+  return bdPost(`/api/provider/booking/${encodeURIComponent(bookingNumber)}/pickup`,
+    { action: 'on_the_way' });
+}
+
+// Pickup: complete with photos (picking_up -> completed + disposal pending).
+export function completePickup(bookingNumber, photoUrls) {
+  return bdPost(`/api/provider/booking/${encodeURIComponent(bookingNumber)}/pickup`,
+    { action: 'complete', pickup_photo_urls: photoUrls });
+}
+
+// Disposal: provider submits transfer-station evidence + scale ticket. The
+// provider does NOT charge anything — BookingDumpsters reviews this report and
+// executes any overweight charge to the customer. fields: {
+//   transfer_station_photo_urls:[2], scale_ticket_photo_url, net_weight_lbs?,
+//   scale_ticket_number?, extra_items_found?, restricted_items_found?, provider_notes? }
+export function submitDisposal(bookingNumber, fields) {
+  return bdPost(`/api/provider/booking/${encodeURIComponent(bookingNumber)}/disposal`, fields);
 }
 
 // --- Legacy endpoint (still used for pickup/ticket until those migrate) ------

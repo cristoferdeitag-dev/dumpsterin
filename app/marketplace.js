@@ -17,10 +17,12 @@ import {
   fetchMarketplaceOrders,
   acceptOrder,
   rejectOrder,
-  providerAction,
   uploadBookingPhoto,
   deliveryOnTheWay,
   completeDelivery,
+  pickupOnTheWay,
+  completePickup,
+  submitDisposal,
 } from '../src/lib/marketplaceApi';
 
 // Marketplace orders (BookingDumpsters) — Fase A. The provider accepts and
@@ -144,13 +146,45 @@ export default function MarketplaceScreen() {
     }, 'Marked delivered — customer notified with photos.');
   }
 
-  async function onTicket(order) {
-    const t = parseFloat(tons[order.id]);
-    if (!t || t <= 0) { Alert.alert('Tons required', 'Type the net weight from the scale ticket first (e.g. 2.4).'); return; }
+  async function onPickupComplete(order) {
+    // 2 pickup photos (empty spot / dumpster loaded), then complete via granular.
+    const files = await pickFiles('image/*');
+    if (files.length < 2) {
+      Alert.alert('2 photos required', 'Select at least 2 pickup photos (the cleared spot and the loaded dumpster).');
+      return;
+    }
+    run(order, async () => {
+      const urls = [];
+      for (const f of files.slice(0, 4)) {
+        urls.push(await uploadBookingPhoto(order.booking_number, 'pickup', f));
+      }
+      await completePickup(order.booking_number, urls);
+    }, 'Picked up — customer notified. Now submit the disposal report.');
+  }
+
+  async function onDisposal(order) {
+    // Provider only submits EVIDENCE. BookingDumpsters reviews and charges any
+    // overweight to the customer — nothing is charged from here.
+    const tsFiles = await pickFiles('image/*');
+    if (tsFiles.length < 2) {
+      Alert.alert('2 transfer-station photos', 'Photo at the station and after dumping.');
+      return;
+    }
     const ticket = await pickFile('image/*,application/pdf');
-    if (!ticket) { Alert.alert('Ticket required', 'Choose the scale ticket photo.'); return; }
-    run(order, () => providerAction(order.id, 'transfer_ticket_uploaded', { payload: { tons: t }, ticket }),
-      'Ticket uploaded — overweight (if any) is charged automatically.');
+    if (!ticket) { Alert.alert('Scale ticket required', 'Choose the scale ticket photo.'); return; }
+    const t = parseFloat(tons[order.id]);
+    run(order, async () => {
+      const tsUrls = [];
+      for (const f of tsFiles.slice(0, 3)) {
+        tsUrls.push(await uploadBookingPhoto(order.booking_number, 'transfer-station', f));
+      }
+      const ticketUrl = await uploadBookingPhoto(order.booking_number, 'scale-ticket', ticket);
+      await submitDisposal(order.booking_number, {
+        transfer_station_photo_urls: tsUrls,
+        scale_ticket_photo_url: ticketUrl,
+        net_weight_lbs: t && t > 0 ? Math.round(t * 2000) : undefined,
+      });
+    }, 'Disposal report submitted — BookingDumpsters will review and charge any overweight.');
   }
 
   const pending = orders.filter((o) => o.provider_confirmation_status === 'pending');
@@ -249,25 +283,25 @@ export default function MarketplaceScreen() {
             <>
               {o.status === 'paid' && actBtn('On the way', '#1D4ED8', () => run(o, () => deliveryOnTheWay(o.booking_number), 'Customer notified you are on the way.'), working === o.id)}
               {o.status === 'dispatched' && actBtn('Delivered + photos', '#00C853', () => onDelivered(o), working === o.id)}
-              {o.status === 'delivered' && actBtn('Start pickup', '#B9770E', () => run(o, () => providerAction(o.id, 'picking_up'), 'Pickup started.'), working === o.id)}
-              {o.status === 'picking_up' && (
+              {o.status === 'delivered' && actBtn('Start pickup', '#B9770E', () => run(o, () => pickupOnTheWay(o.booking_number), 'Customer notified — pickup on the way.'), working === o.id)}
+              {o.status === 'picking_up' && actBtn('Picked up + photos', '#00C853', () => onPickupComplete(o), working === o.id)}
+              {o.disposal_status === 'in_transit_to_transfer_station' && (
                 <>
                   <TextInput
                     value={tons[o.id] || ''}
                     onChangeText={(v) => setTons({ ...tons, [o.id]: v })}
-                    placeholder="tons"
+                    placeholder="net tons"
                     keyboardType="decimal-pad"
-                    style={{ borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, width: 64, fontSize: 12, backgroundColor: '#FFF' }}
+                    style={{ borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, width: 72, fontSize: 12, backgroundColor: '#FFF' }}
                   />
-                  {actBtn('Scale ticket', '#6A1B9A', () => onTicket(o), working === o.id)}
-                  {actBtn('Complete', '#00C853', () => run(o, () => providerAction(o.id, 'completed'), 'Order completed 🎉'), working === o.id)}
+                  {actBtn('Disposal report', '#6A1B9A', () => onDisposal(o), working === o.id)}
                 </>
               )}
             </>
           )))}
 
           <Text style={{ color: '#999', fontSize: 11, marginTop: 16 }}>
-            Every tap reports straight to BookingDumpsters: the customer sees live tracking, photos are stored, and overweight from the scale ticket is charged automatically.
+            Every tap reports straight to BookingDumpsters: the customer gets notified (dashboard + email) and photos are stored. You only upload the scale-ticket evidence — BookingDumpsters reviews it and charges any overweight to the customer.
           </Text>
         </ScrollView>
       )}
