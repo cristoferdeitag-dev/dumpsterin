@@ -49,6 +49,42 @@ export function rejectOrder(bookingNumber, reason) {
     reason ? { reason } : {});
 }
 
+// --- Granular endpoints (the correct ones BD's web portal uses) -------------
+// These write the per-phase status fields (delivery_status/pickup_status/...),
+// the side-event tables, AND fire the customer notifications — which the legacy
+// /api/provider/action below does NOT. Migrating the lifecycle here (Fase 1)
+// fixes the "customer never gets notified" gap.
+
+// Upload one photo to BD and return its signed URL. category for a provider:
+// 'delivery' | 'pickup' | 'transfer-station' | 'scale-ticket'.
+export async function uploadBookingPhoto(bookingNumber, category, file) {
+  const token = await authToken();
+  if (!token) throw new Error('Not signed in');
+  const form = new FormData();
+  form.append('file', file);
+  form.append('category', category);
+  const res = await fetch(
+    `${BD}/api/booking/${encodeURIComponent(bookingNumber)}/upload-photo`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `photo upload failed (${res.status})`);
+  return data.signedUrl;
+}
+
+// Delivery: driver on the way (paid -> dispatched).
+export function deliveryOnTheWay(bookingNumber) {
+  return bdPost(`/api/provider/booking/${encodeURIComponent(bookingNumber)}/delivery`,
+    { action: 'on_the_way' });
+}
+
+// Delivery: complete with photos (dispatched -> delivered). BD requires 2.
+export function completeDelivery(bookingNumber, photoUrls) {
+  return bdPost(`/api/provider/booking/${encodeURIComponent(bookingNumber)}/delivery`,
+    { action: 'complete', delivery_photo_urls: photoUrls });
+}
+
+// --- Legacy endpoint (still used for pickup/ticket until those migrate) ------
 // kind: in_transit | delivered | picking_up | transfer_ticket_uploaded | completed
 // files: { photo?: File, ticket?: File } (web File objects)
 export async function providerAction(bookingId, kind, { payload, photo, ticket } = {}) {

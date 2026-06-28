@@ -18,6 +18,9 @@ import {
   acceptOrder,
   rejectOrder,
   providerAction,
+  uploadBookingPhoto,
+  deliveryOnTheWay,
+  completeDelivery,
 } from '../src/lib/marketplaceApi';
 
 // Marketplace orders (BookingDumpsters) — Fase A. The provider accepts and
@@ -38,6 +41,21 @@ function pickFile(accept) {
     input.type = 'file';
     input.accept = accept;
     input.onchange = () => resolve(input.files && input.files[0] ? input.files[0] : null);
+    input.click();
+  });
+}
+
+function pickFiles(accept) {
+  // Like pickFile but allows selecting multiple (BD requires 2 delivery photos).
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    return Promise.resolve([]);
+  }
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.multiple = true;
+    input.onchange = () => resolve(input.files ? Array.from(input.files) : []);
     input.click();
   });
 }
@@ -110,9 +128,20 @@ export default function MarketplaceScreen() {
   }
 
   async function onDelivered(order) {
-    const photo = await pickFile('image/*');
-    if (!photo) { Alert.alert('Photo required', 'Take/choose a photo of the dumpster on site.'); return; }
-    run(order, () => providerAction(order.id, 'delivered', { photo }), 'Marked delivered — customer notified.');
+    // BD requires 2 delivery photos. Upload them first, then complete via the
+    // granular endpoint (which notifies the customer with the photos attached).
+    const files = await pickFiles('image/*');
+    if (files.length < 2) {
+      Alert.alert('2 photos required', 'Select at least 2 photos of the dumpster on site.');
+      return;
+    }
+    run(order, async () => {
+      const urls = [];
+      for (const f of files.slice(0, 4)) {
+        urls.push(await uploadBookingPhoto(order.booking_number, 'delivery', f));
+      }
+      await completeDelivery(order.booking_number, urls);
+    }, 'Marked delivered — customer notified with photos.');
   }
 
   async function onTicket(order) {
@@ -218,8 +247,8 @@ export default function MarketplaceScreen() {
           {active.length === 0 && <Text style={{ color: '#888' }}>No active marketplace jobs.</Text>}
           {active.map((o) => card(o, (
             <>
-              {o.status === 'paid' && actBtn('On the way', '#1D4ED8', () => run(o, () => providerAction(o.id, 'in_transit'), 'Customer notified you are on the way.'), working === o.id)}
-              {o.status === 'dispatched' && actBtn('Delivered + photo', '#00C853', () => onDelivered(o), working === o.id)}
+              {o.status === 'paid' && actBtn('On the way', '#1D4ED8', () => run(o, () => deliveryOnTheWay(o.booking_number), 'Customer notified you are on the way.'), working === o.id)}
+              {o.status === 'dispatched' && actBtn('Delivered + photos', '#00C853', () => onDelivered(o), working === o.id)}
               {o.status === 'delivered' && actBtn('Start pickup', '#B9770E', () => run(o, () => providerAction(o.id, 'picking_up'), 'Pickup started.'), working === o.id)}
               {o.status === 'picking_up' && (
                 <>
