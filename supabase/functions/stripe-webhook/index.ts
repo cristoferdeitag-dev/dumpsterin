@@ -115,6 +115,27 @@ async function findBookingByNumber(
   return rows[0] || null;
 }
 
+// True when this invoice already produced a payment row in the ledger, no
+// matter who wrote it (this webhook, the reconcile cron, or BookingDumpsters'
+// mark-paid for cash/Zelle). Guards against counting one sale twice.
+async function ledgerHasInvoice(invoiceId: string): Promise<boolean> {
+  if (!invoiceId) return false;
+  const params = new URLSearchParams({
+    select: "id",
+    stripe_object_id: `eq.${invoiceId}`,
+    category: "in.(provider_invoice_charge,provider_invoice_oob_payment)",
+    limit: "1",
+  });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/transactions?${params}`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  });
+  // On a lookup failure, fall through and let the insert happen: a duplicate
+  // row is easier to spot and fix than a payment that never got recorded.
+  if (!res.ok) return false;
+  const rows = (await res.json()) as Array<{ id: string }>;
+  return rows.length > 0;
+}
+
 // Paid provider quote with no booking yet → schedule the service
 // automatically (Cris 2026-06-12: "cuando se paga se debería agendar en
 // automático"). Returns the created booking id, or null.
@@ -210,7 +231,13 @@ async function handleInvoicePaid(
 ): Promise<void> {
   const md = (invoice.metadata as Record<string, string>) || {};
   const bookingNumber = md.booking_id || "";
-  const paidOob = invoice.paid_out_of_band === true;
+  // `paid_out_of_band` is absent from the payload Stripe delivers here (the
+  // account is pinned to 2025-05-28.basil), so infer it: a paid invoice with
+  // neither a charge nor a payment_intent was settled outside Stripe —
+  // cash/Zelle/check — because every card payment leaves one of the two.
+  const paidOob =
+    invoice.paid_out_of_band === true ||
+    (invoice.status === "paid" && !invoice.charge && !invoice.payment_intent);
   // Out-of-band payments keep amount_paid at 0 — fall back to amount_due.
   const amountCents =
     ((invoice.amount_paid as number) || 0) || ((invoice.amount_due as number) || 0);
@@ -221,6 +248,23 @@ async function handleInvoicePaid(
     : new Date().toISOString();
   const invoiceId = invoice.id as string;
   const customerName = (invoice.customer_name as string) || "(sin nombre)";
+
+  // Someone already booked this invoice? Then don't book it twice.
+  //
+  // BookingDumpsters' /api/quotes/mark-paid writes the
+  // `provider_invoice_oob_payment` row for cash/Zelle BEFORE telling Stripe
+  // (invoices.pay with paid_out_of_band), and Stripe fires invoice.paid all
+  // the same — so this handler used to add a second row for the same sale,
+  // labelled "card". Reports showed the money twice (caught 18-ago-2026).
+  //
+  // Why not just trust `paidOob` above: Stripe delivers this event with the
+  // account's pinned API version (2025-05-28.basil), and `paid_out_of_band`
+  // does NOT exist in that payload — it always reads undefined here, no matter
+  // what's deployed. Deduping on the invoice id works on any API version.
+  if (await ledgerHasInvoice(invoiceId)) {
+    console.log(`invoice ${invoiceId} already in the ledger — skipping duplicate row`);
+    return;
+  }
 
   let booking = bookingNumber ? await findBookingByNumber(bookingNumber) : null;
 
