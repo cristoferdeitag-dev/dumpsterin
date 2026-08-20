@@ -232,12 +232,16 @@ async function handleInvoicePaid(
   const md = (invoice.metadata as Record<string, string>) || {};
   const bookingNumber = md.booking_id || "";
   // `paid_out_of_band` is absent from the payload Stripe delivers here (the
-  // account is pinned to 2025-05-28.basil), so infer it: a paid invoice with
-  // neither a charge nor a payment_intent was settled outside Stripe —
-  // cash/Zelle/check — because every card payment leaves one of the two.
+  // account is pinned to 2025-05-28.basil), so infer it from the money:
+  // a paid invoice with amount_paid = 0 was settled outside Stripe
+  // (cash/Zelle/check) — Stripe only counts money it moved itself.
+  // DO NOT infer from `!invoice.charge && !invoice.payment_intent`: on
+  // basil those fields are gone from the Invoice object (moved to
+  // `payments`), so that test labelled EVERY card payment as out-of-band
+  // (6 invoices, 19–20 ago 2026; dictamen Hermes GO 20-ago).
   const paidOob =
     invoice.paid_out_of_band === true ||
-    (invoice.status === "paid" && !invoice.charge && !invoice.payment_intent);
+    (invoice.status === "paid" && Number(invoice.amount_paid || 0) === 0);
   // Out-of-band payments keep amount_paid at 0 — fall back to amount_due.
   const amountCents =
     ((invoice.amount_paid as number) || 0) || ((invoice.amount_due as number) || 0);
