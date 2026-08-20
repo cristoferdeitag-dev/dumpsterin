@@ -9,6 +9,16 @@
 
 ---
 
+## 2026-08-20 (15:25Z) — cris (Fable 5) — 🐛 Edge Function `stripe-webhook` v11: pagos con TARJETA caían como "fuera de Stripe" — corregido + 6 filas reetiquetadas
+
+- **Síntoma:** Cris pidió verificar el cobro real de RPT properties ($150, Overload fee) desde /provider/cobros de BD. El cobro estaba perfecto en Stripe (succeeded, fee 1%, recibo enviado), pero en `transactions` quedó como `provider_invoice_oob_payment` / `other`. Igual las otras 5 facturas con tarjeta desde v10 (Susan Snyder $599, Erik Feld $399.99, Jonah Abkowitz $920.39, Marti $150, Auric Aspen $599) — $2,818.38 mal desglosados (totales correctos).
+- **Causa:** la inferencia de v10 `!invoice.charge && !invoice.payment_intent` — en API **2025-05-28.basil** (la fijada en la cuenta de TP) esos campos NO vienen en el Invoice del evento (se movieron a `payments`) → TODO pago daba `paidOob=true`. Mismo patrón que [[ref_stripe_webhook_api_version_campos_faltantes]].
+- **Fix (dictamen Hermes GO, brief `/root/reports/consejo/2026-08-20-ledger-oob-fix/brief.md`):** `paidOob = paid_out_of_band===true || (status==='paid' && Number(amount_paid||0)===0)` — señal independiente de la versión de API (OOB deja amount_paid en 0). Deploy `supabase functions deploy stripe-webhook` → **v11 ACTIVE**. Commit `da79575` en main (el push dispara el GH Action de dumpsterin.com; sin cambio visible).
+- **Ledger:** UPDATE de las 6 filas a `provider_invoice_charge`/`card` (filtro por id+categoría+método). Respaldo previo: scratchpad `ledger_oob_backup_2026-08-20.json`.
+- **Reconcile de BD** no necesita cambio: solo usa `paid_out_of_band===true` con el SDK de BD (versión donde sí existe el campo).
+- ⚠️ El cambio ajeno sin commitear (`resolveProviderId`) sigue en el working tree, restaurado tal cual tras el deploy (v11 NO lo incluye). Pendiente de su autor.
+- **Pendiente verificar:** próximo cobro con tarjeta → fila `provider_invoice_charge`/`card`; próximo efectivo → `oob`/`cash` sin duplicado.
+
 ## 2026-08-19 (01:34Z) — cris2/Laso (Fable 5) — 🐛 Edge Function `stripe-webhook`: fin del DOBLE CONTEO en pagos efectivo/Zelle — desplegada v10
 
 - **Síntoma (lo detectó Cris probando cobros de BookingDumpsters):** cada factura marcada como pagada en efectivo/Zelle quedaba DOS veces en `transactions` — la fila correcta `provider_invoice_oob_payment` (la escribe `mark-paid` de BD) y otra `provider_invoice_charge` etiquetada "card" (la escribía ESTA función). Los reportes mostraban el dinero al doble y con método equivocado.
