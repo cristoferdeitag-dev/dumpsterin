@@ -136,6 +136,32 @@ async function ledgerHasInvoice(invoiceId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// Map a Stripe Connect connected-account id → our company (provider) id.
+// Connect events carry `event.account` = the connected account that owns the
+// object. We look it up in `companies.stripe_account_id`, so the webhook is
+// provider-aware: every provider's invoice lands under THEIR company instead of
+// a hardcoded one. Falls back to TP for platform-level events / unknown accounts.
+async function resolveProviderId(account: string | undefined | null): Promise<string> {
+  if (!account) return TP_COMPANY_ID;
+  try {
+    const params = new URLSearchParams({
+      select: "id",
+      stripe_account_id: `eq.${account}`,
+      limit: "1",
+    });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/companies?${params}`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    });
+    if (res.ok) {
+      const rows = (await res.json()) as Array<{ id: string }>;
+      if (rows[0]?.id) return rows[0].id;
+    }
+  } catch (e) {
+    console.error("resolveProviderId failed:", e);
+  }
+  return TP_COMPANY_ID;
+}
+
 // Paid provider quote with no booking yet → schedule the service
 // automatically (Cris 2026-06-12: "cuando se paga se debería agendar en
 // automático"). Returns the created booking id, or null.
@@ -143,7 +169,8 @@ async function createBookingFromQuote(
   invoice: Record<string, unknown>,
   md: Record<string, string>,
   amountPaid: number,
-  paidAt: string
+  paidAt: string,
+  providerId: string
 ): Promise<{ id: string; booking_number: string } | null> {
   const sizeNum = parseInt((md.size || "").replace(/\D/g, ""), 10);
   const dumpsterSize = [10, 20, 30].includes(sizeNum) ? sizeNum : 20;
@@ -166,7 +193,7 @@ async function createBookingFromQuote(
 
   const row: Record<string, unknown> = {
     booking_number: bookingNumber,
-    company_id: md.provider_id || TP_COMPANY_ID,
+    company_id: md.provider_id || providerId,
     customer_name: (invoice.customer_name as string) || (invoice.customer_email as string) || "Quote customer",
     customer_email: (invoice.customer_email as string) || null,
     customer_phone: md.customer_phone || null,
@@ -227,7 +254,8 @@ async function updateBookingPayment(
 
 async function handleInvoicePaid(
   invoice: Record<string, unknown>,
-  eventId: string
+  eventId: string,
+  providerId: string
 ): Promise<void> {
   const md = (invoice.metadata as Record<string, string>) || {};
   const bookingNumber = md.booking_id || "";
@@ -275,7 +303,7 @@ async function handleInvoicePaid(
   // Paid quote without an existing booking → schedule it automatically.
   let autoCreated: { id: string; booking_number: string } | null = null;
   if (!booking && md.product === "provider_invoice") {
-    autoCreated = await createBookingFromQuote(invoice, md, amountPaid, paidAt);
+    autoCreated = await createBookingFromQuote(invoice, md, amountPaid, paidAt, providerId);
     if (autoCreated) {
       booking = { id: autoCreated.id, total: amountPaid };
       await notifyTelegram(
@@ -317,7 +345,7 @@ async function handleInvoicePaid(
     amount_cents: amountCents,
     currency: (invoice.currency as string) || "usd",
     booking_id: booking?.id || null,
-    provider_id: TP_COMPANY_ID,
+    provider_id: providerId,
     payment_method: paidOob ? oobMethod : "card",
     stripe_object_id: invoiceId,
     stripe_event_id: eventId,
@@ -368,7 +396,8 @@ async function handleInvoicePaid(
 
 async function handleChargeRefunded(
   charge: Record<string, unknown>,
-  eventId: string
+  eventId: string,
+  providerId: string
 ): Promise<void> {
   const invoiceId = charge.invoice as string | null;
   const refundedCents = (charge.amount_refunded as number) || 0;
@@ -397,7 +426,7 @@ async function handleChargeRefunded(
     amount_cents: -refundedCents,
     currency: (charge.currency as string) || "usd",
     booking_id: booking?.id || null,
-    provider_id: TP_COMPANY_ID,
+    provider_id: providerId,
     payment_method: "card",
     stripe_object_id: (charge.id as string) || null,
     stripe_event_id: eventId,
@@ -430,21 +459,24 @@ Deno.serve(async (req: Request) => {
     return new Response("Invalid signature", { status: 401 });
   }
 
-  let event: { id: string; type: string; data: { object: Record<string, unknown> } };
+  let event: { id: string; type: string; account?: string; data: { object: Record<string, unknown> } };
   try {
     event = JSON.parse(rawBody);
   } catch {
     return new Response("Bad JSON", { status: 400 });
   }
 
-  console.log(`[webhook] event=${event.type}`);
+  console.log(`[webhook] event=${event.type} account=${event.account || "(platform)"}`);
+  // Provider-aware: resolve which connected account (provider) this event
+  // belongs to, so each provider's money lands under their own company.
+  const providerId = await resolveProviderId(event.account);
   try {
     if (event.type === "invoice.paid") {
       // Only invoice.paid — listening to invoice.payment_succeeded too would
       // double-write the ledger (both fire for the same payment).
-      await handleInvoicePaid(event.data.object, event.id);
+      await handleInvoicePaid(event.data.object, event.id, providerId);
     } else if (event.type === "charge.refunded") {
-      await handleChargeRefunded(event.data.object, event.id);
+      await handleChargeRefunded(event.data.object, event.id, providerId);
     }
     // Acknowledge other events silently — Stripe retries non-2xx responses.
   } catch (err) {
